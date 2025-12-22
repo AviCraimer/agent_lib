@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Tuple, cast
+from typing import Any, Callable, Literal, Optional, Tuple, cast
 
 
-type Children = ContextComponent[None] | Tuple[
-    ContextComponent[None], Children
-] | str | None | list[Children]
+type Children = ContextComponent[None] | str | None | list[Children]
 
 
 class Tag:
@@ -48,20 +46,24 @@ def is_children(value: Any) -> bool:
         return True
     if isinstance(value, ContextComponent) and value.props_bound:
         return True
-    if isinstance(value, tuple) and len(value) == 2:
-        first, second = value
-        return (
-            isinstance(first, ContextComponent)
-            and first.props_bound
-            and is_children(second)
-        )
     if isinstance(value, list):
         return all(is_children(item) for item in value)
     return False
 
 
-# Arguments: component, children, props: P
-type RenderFn[P = None] = Callable[[ContextComponent[P], Children, P], str]
+def get_children_from_props(props: Any) -> Children:
+    # Handle dict-like props
+    if isinstance(props, dict):
+        if "children" in props and is_children(props["children"]):
+            return cast(Children, props["children"])
+    # Handle class instances
+    elif hasattr(props, "children") and is_children(props.children):
+        return cast(Children, props.children)
+    return None
+
+
+# Arguments: component, props: P
+type RenderFn[P = None] = Callable[[ContextComponent[P], P], str]
 
 
 class ContextComponent[P]:
@@ -94,9 +96,7 @@ class ContextComponent[P]:
             case str() as s:
                 render_list = [s]
             case ContextComponent() as component:
-                render_list = [component(None, None)]
-            case (ContextComponent() as component, grandchildren):
-                render_list = [component(grandchildren, None)]
+                render_list = [component.render(None)]
             case list() as child_list:
                 render_list = [self.render_children(child) for child in child_list]
         return "".join([wrap(s, self._list_delimitor) for s in render_list])
@@ -104,30 +104,20 @@ class ContextComponent[P]:
     def __rshift__(self, children: Children):
         return self.render_children(children)
 
-    def __call__(self, children: Children, props: P):
-        inner = self.__render(self, children, props)
+    def render(self, props: P):
+        inner = self.__render(self, props)
         return wrap(inner, self._delimitor)
 
     def pass_props(self, props: P) -> ContextComponent[None]:
-        def new_render(
-            new_component: ContextComponent[None], children: Children, no_props: None
-        ) -> str:
-            return self.__render(self, children, props)
+        def new_render(new_component: ContextComponent[None], no_props: None) -> str:
+            return self.__render(self, props)
 
         return ContextComponent(
             new_render, self._delimitor, self._list_delimitor, props_bound=True
         )
 
-    def _get_children_from_props(self, props: P) -> Children:
-        if hasattr(props, "children") and is_children(props.children):
-            return cast(Children, props.children)
-        return None
+    def __getitem__(self, props: P) -> ContextComponent[None]:
+        return self.pass_props(props)
 
-    def __getitem__(
-        self, props: P
-    ) -> ContextComponent[None] | Tuple[ContextComponent[None], Children]:
-        comp = self.pass_props(props)
-        children = self._get_children_from_props(props)
-        if children is not None:
-            return (comp, children)
-        return comp
+
+type JustChildren = dict[Literal["children"], Children]
