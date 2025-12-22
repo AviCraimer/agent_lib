@@ -1,0 +1,19 @@
+{
+  "include": ["src", "tests"],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "strict",
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownArgumentType": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportUnknownParameterType": "warning",
+  "reportUnusedImport": "warning",
+  "reportUntypedFunctionDecorator": "error",
+  "reportUntypedBaseClass": "error",
+  "reportUnnecessaryCast": "warning",
+  "reportUnnecessaryIsInstance": "warning",
+  "reportUnreachable": "warning",
+  "enableTypeIgnoreComments": true
+}
