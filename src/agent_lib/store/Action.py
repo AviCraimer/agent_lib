@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from typing import Callable, ClassVar
+from collections.abc import Coroutine
+from typing import Any, Callable, ClassVar
+
+# Type alias for bound actions (after binding to a Store instance)
+type BoundAction[T] = Callable[[T], None] | Callable[[T], Coroutine[Any, Any, None]]
 
 
 class Action[T, S]:
