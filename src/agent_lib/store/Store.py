@@ -13,6 +13,7 @@ from agent_lib.store.snapshot import snapshot
 class Store[S]:
     _state: S
     _actions: dict[str, Callable[..., None]]
+    _subscribers: list[Callable[[Delta], None]]
 
     @staticmethod
     def action[T, St](handler: Callable[[St, T], frozenset[str]]) -> Action[T, St]:
@@ -22,6 +23,7 @@ class Store[S]:
     def __init__(self, initial_state: S):
         self._state = initial_state
         self._actions = {}
+        self._subscribers = []
         self._bind_actions()
 
     def _bind_actions(self) -> None:
@@ -73,8 +75,27 @@ class Store[S]:
         return combined
 
     def _notify_subscribers(self, delta: Delta) -> None:
-        """Notify subscribers of state changes. Implemented in Section 5."""
-        pass  # Stub - will be implemented with subscription system
+        """Notify all subscribers of state changes.
+
+        Args:
+            delta: The Delta object containing all changes from the action
+        """
+        if not delta.diff:  # empty = no changes
+            return
+        for subscriber in self._subscribers:
+            subscriber(delta)
+
+    def subscribe(self, callback: Callable[[Delta], None]) -> Callable[[], None]:
+        """Subscribe to state changes.
+
+        Args:
+            callback: Function to call with Delta when state changes
+
+        Returns:
+            Unsubscribe function - call it to remove the subscription
+        """
+        self._subscribers.append(callback)
+        return lambda: self._subscribers.remove(callback)
 
     def get_actions(self, *names: str) -> dict[str, Callable[..., None]]:
         """Get bound actions by name. If no names provided, returns all actions."""

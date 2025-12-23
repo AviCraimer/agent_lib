@@ -214,16 +214,16 @@ unsubscribe = store.subscribe(on_language_change)
 **Implementation status:**
 - [x] Decided: subscribers receive Delta
 - [x] Decided: returns unsubscribe function
-- [ ] TODO: Implement `subscribe()` and `_notify_subscribers()`
-  - [ ] Add `_subscribers: list[Callable[[Delta], None]]` to Store `__init__`
-  - [ ] Implement `subscribe(self, callback) -> Callable[[], None]`
-  - [ ] Return lambda that removes callback from list
-  - [ ] Implement `_notify_subscribers(self, delta: Delta) -> None`
-  - [ ] Early return if `not delta.diff` (empty delta)
-  - [ ] Iterate subscribers, call each with delta
-  - [ ] Write unit test: subscribe, trigger action, verify callback received Delta
-  - [ ] Write unit test: unsubscribe, trigger action, verify callback NOT called
-  - [ ] Write unit test: no-op action does not trigger subscribers
+- [x] TODO: Implement `subscribe()` and `_notify_subscribers()`
+  - [x] Add `_subscribers: list[Callable[[Delta], None]]` to Store `__init__`
+  - [x] Implement `subscribe(self, callback) -> Callable[[], None]`
+  - [x] Return lambda that removes callback from list
+  - [x] Implement `_notify_subscribers(self, delta: Delta) -> None`
+  - [x] Early return if `not delta.diff` (empty delta)
+  - [x] Iterate subscribers, call each with delta
+  - [x] Write unit test: subscribe, trigger action, verify callback received Delta
+  - [x] Write unit test: unsubscribe, trigger action, verify callback NOT called
+  - [x] Write unit test: no-op action does not trigger subscribers
 - [ ] Open: Add path-based subscription helpers? (e.g., `subscribe_path("user.*", cb)`)
 
 ---
