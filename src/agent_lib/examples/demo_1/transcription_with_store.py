@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from agent_lib.component.Store import Store
+from agent_lib.store.Store import Store
 from agent_lib.examples.demo_1.transcription import (
     AudioInstructions,
     AudioProps,
@@ -12,6 +12,7 @@ from agent_lib.examples.demo_1.transcription import (
 
 # State
 
+
 @dataclass
 class AppState:
     audio_format: str
@@ -19,6 +20,7 @@ class AppState:
 
 
 # Store with actions
+
 
 class TranscriptionStore(Store[AppState]):
     def set_language(self, language: str) -> None:
