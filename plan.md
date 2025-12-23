@@ -31,11 +31,11 @@ Unlike Redux's immutability, we allow direct state mutation because:
 **Implementation status:**
 - [x] Decided: mutation-based approach
 - [x] Decided: use `copy.deepcopy()` for snapshots
-- [ ] TODO: Create `snapshot()` wrapper function for easy library swap later
-  - [ ] Create `src/agent_lib/store/snapshot.py`
-  - [ ] Define `def snapshot[S](state: S) -> S` using `copy.deepcopy`
-  - [ ] Add docstring noting this can be swapped for `duper`, pickle, or `orjson` later
-  - [ ] Import and use in Store instead of direct `copy.deepcopy` call
+- [x] TODO: Create `snapshot()` wrapper function for easy library swap later
+  - [x] Create `src/agent_lib/store/snapshot.py`
+  - [x] Define `def snapshot[S](state: S) -> S` using `copy.deepcopy`
+  - [x] Add docstring noting this can be swapped for `duper`, pickle, or `orjson` later
+  - [x] Import and use in Store instead of direct `copy.deepcopy` call (deferred to Phase 2 when `_process_action` is implemented)
 
 ---
 
