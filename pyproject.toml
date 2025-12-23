@@ -6,7 +6,6 @@ requires = ["setuptools>=69", "wheel"]
 authors = [{name = "Avi Craimer"}]
 dependencies = [
   "deepdiff>=8.0",
-  "glom>=24.0",
 ]
 description = "A Python project"
 license = {text = "MIT"}
@@ -18,6 +17,7 @@ version = "0.1.0"
 [project.optional-dependencies]
 dev = [
   "pytest",
+  "pytest-asyncio",
   "ruff",
   "pyright",
 ]
@@ -40,3 +40,4 @@ select = ["E", "F", "I", "UP", "B"] # pycodestyle, pyflakes, isort, pyupgrade, b
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+asyncio_mode = "auto"

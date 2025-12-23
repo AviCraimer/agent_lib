@@ -86,37 +86,38 @@ def set_language(state: AppState, lang: str) -> frozenset[str]:
 
 ### 3. Diffing Flow
 
-**Decision:** Use DeepDiff with Delta objects for combining multiple subtree diffs.
+**Decision:** Use DeepDiff with `include_paths` for scoped diffing with correct full paths.
 
 **Flow:**
 1. Take snapshot before action runs
 2. Action mutates state, returns scope (paths to diff)
-3. For each path in scope, extract subtree from snapshot and current state
-4. Diff subtrees, combine results using `Delta` + operator
-5. Return combined Delta
+3. Pass scope to DeepDiff's `include_paths` parameter
+4. DeepDiff only checks specified paths but returns full paths in output
+5. Return Delta with correct paths for subscribers
 
 ```python
 from deepdiff import DeepDiff, Delta
-from glom import glom
 import copy
 
-def _process_action(self, action, payload) -> Delta:
+def _process_action(self, handler, payload) -> Delta:
     """Run action and return Delta representing all changes."""
     snapshot = copy.deepcopy(self._state)
-    scope = action(self._state, payload)
+    scope = handler(self._state, payload)
 
     if not scope:  # no-op
         return Delta({})
 
-    combined = Delta({})
-    for scope_path in scope:
-        old_subtree = glom(snapshot, scope_path)
-        new_subtree = glom(self._state, scope_path)
-        diff = DeepDiff(old_subtree, new_subtree)
-        combined = combined + Delta(diff)
-
-    return combined
+    # "." means full diff, otherwise restrict to specified paths
+    include = None if "." in scope else list(scope)
+    diff = DeepDiff(snapshot, self._state, include_paths=include)
+    return Delta(diff)
 ```
+
+**Why `include_paths` instead of subtree diffing:**
+- Subtree diffing produces paths relative to subtree root (e.g., `root` instead of `root.language`)
+- `include_paths` diffs full objects but only checks specified paths
+- Results in correct full paths for subscribers (e.g., `['language']` not `[]`)
+- ~70x faster than full diff, only ~2x slower than subtree diff (see benchmarks)
 
 **Accessing changes from Delta:**
 ```python
@@ -130,22 +131,22 @@ for row in delta.to_flat_rows():
 
 **Implementation status:**
 - [x] Decided: DeepDiff for diffing
-- [x] Decided: Delta for combining (supports `+` operator)
-- [x] Decided: glom for path-based access
+- [x] Decided: Delta for change representation
+- [x] Decided: `include_paths` for scoped diffing (replaces glom-based subtree diffing)
 - [x] TODO: Implement `_process_action()` in Store
-  - [x] Add imports: `from deepdiff import DeepDiff, Delta` and `from glom import T, glom`
+  - [x] Add imports: `from deepdiff import DeepDiff, Delta`
   - [x] Add method `_process_action(self, handler: Callable, payload: Any) -> Delta`
   - [x] Call `snapshot()` before action runs
   - [x] Call action handler, capture returned scope
   - [x] Handle empty scope (no-op) → return `Delta({})`
-  - [x] Loop through scope paths, glom subtrees, diff, combine with `+` (note: uses `T` for root access when path is ".")
+  - [x] Use `include_paths=list(scope)` for scoped diff, `None` for full diff (".")
   - [x] Write unit test: action returns specific path, verify Delta contains change
   - [x] Write unit test: action returns `no_op`, verify empty Delta
   - [x] Write unit test: action returns `full_diff`, verify full state diffed
-- [x] TODO: Add `deepdiff` and `glom` to dependencies
+  - [x] Write benchmark tests: verify scoped diff is >10x faster than full diff
+- [x] TODO: Add `deepdiff` to dependencies
   - [x] Add to `pyproject.toml` under `[project.dependencies]`
   - [x] Run `make setup` to install
-  - [x] Verify imports work: `python -c "from deepdiff import Delta; from glom import glom"`
 
 ---
 
@@ -313,14 +314,14 @@ async def _run_async_action(self, async_fn, on_success, on_error, payload):
 - [x] Decided: no `on_start` (YAGNI for LLM apps)
 - [x] Decided: use `AsyncAction` class, discovered in `_bind_actions()` via `_bind_async_actions()`
 
-- [ ] TODO: Create `AsyncAction` class
-  - [ ] Create `src/agent_lib/store/AsyncAction.py`
-  - [ ] Generic class `AsyncAction[PL, St, R]` where PL=payload, St=state, R=result
-  - [ ] Store: `handler` (async fn), `on_success` (handler fn), `on_error` (optional handler fn)
-  - [ ] `__call__` raises error if accessed on class (like `Action`)
+- [x] TODO: Create `AsyncAction` class
+  - [x] Create `src/agent_lib/store/AsyncAction.py`
+  - [x] Generic class `AsyncAction[PL, St, R]` where PL=payload, St=state, R=result
+  - [x] Store: `handler` (async fn), `on_success` (handler fn), `on_error` (optional handler fn)
+  - [x] `__call__` raises error if accessed on class (like `Action`)
 
-- [ ] TODO: Implement `@Store.async_action` decorator
-  - [ ] Full type signature:
+- [x] TODO: Implement `@Store.async_action` decorator
+  - [x] Full type signature:
     ```python
     @staticmethod
     def async_action[St, PL, R](
@@ -328,28 +329,28 @@ async def _run_async_action(self, async_fn, on_success, on_error, payload):
         on_error: Callable[[St, Exception], frozenset[str]] | None = None
     ) -> Callable[[Callable[[St, PL], Coroutine[Any, Any, R]]], AsyncAction[PL, St, R]]:
     ```
-  - [ ] Decorator factory: takes hooks, returns decorator
-  - [ ] Decorator wraps async function `(St, PL) -> Coroutine[..., R]` and returns `AsyncAction[PL, St, R]`
+  - [x] Decorator factory: takes hooks, returns decorator
+  - [x] Decorator wraps async function `(St, PL) -> Coroutine[..., R]` and returns `AsyncAction[PL, St, R]`
 
-- [ ] TODO: Implement `_bind_async_actions()` in Store
-  - [ ] Called from `_bind_actions()`
-  - [ ] Discover `AsyncAction` attributes on class
-  - [ ] Create bound async method that calls `_run_async_action()`
-  - [ ] Bound method signature: `async (payload: T) -> None`
+- [x] TODO: Implement `_bind_async_actions()` in Store
+  - [x] Called from `__init__()` after `_bind_actions()`
+  - [x] Discover `AsyncAction` attributes on class
+  - [x] Create bound async method that calls `_run_async_action()`
+  - [x] Bound method signature: `async (payload: T) -> None`
 
-- [ ] TODO: Implement `_run_async_action()` in Store
-  - [ ] `async def _run_async_action(self, async_action: AsyncAction, payload: Any) -> None`
-  - [ ] Call `await async_action.handler(self._state, payload)` to get result
-  - [ ] On success: `delta = self._process_action(async_action.on_success, result)`
-  - [ ] Call `self._notify_subscribers(delta)`
-  - [ ] On exception: if `on_error`, process it; else re-raise
+- [x] TODO: Implement `_run_async_action()` in Store
+  - [x] `async def _run_async_action(self, async_action: AsyncAction, payload: Any) -> None`
+  - [x] Call `await async_action.handler(self._state, payload)` to get result
+  - [x] On success: `delta = self._process_action(async_action.on_success, result)`
+  - [x] Call `self._notify_subscribers(delta)`
+  - [x] On exception: if `on_error`, process it; else re-raise
 
-- [ ] TODO: Write unit tests
-  - [ ] Test: async success path triggers `on_success`, state updated, subscribers notified
-  - [ ] Test: async error path triggers `on_error` when provided
-  - [ ] Test: async error re-raises when no `on_error`
-  - [ ] Test: async action returns `None`
-  - [ ] Test: async action can read state but mutations in async fn don't trigger diff
+- [x] TODO: Write unit tests (`tests/store/test_async_action_LLM.py`)
+  - [x] Test: async success path triggers `on_success`, state updated, subscribers notified
+  - [x] Test: async error path triggers `on_error` when provided
+  - [x] Test: async error re-raises when no `on_error`
+  - [x] Test: async action returns `None`
+  - [x] Test: async action can read state but mutations in async fn don't trigger diff
 
 ---
 
