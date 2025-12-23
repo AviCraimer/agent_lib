@@ -13,6 +13,9 @@ This project uses **implicit namespace packages** (PEP 420). Do NOT add `__init_
 
 ## Development Commands
 
+Activate venv before tying to run python code.
+- `source .venv/bin/activate`
+
 Use the Makefile for common tasks:
 - `make setup` - Initial setup (create venv, install deps)
 - `make test` - Run tests

@@ -14,48 +14,73 @@ class TranscriptionProps:
         self.children = children
 
 
+TranscriptCTA = ContextComponent.leaf(
+    lambda: "Provide the transcript below:", ("\n", "")
+)
+
 SystemPrompt = ContextComponent[JustChildren](
-    lambda comp, props: f"You are a transcription assistant.\n{comp>>props["children"]}",
+    lambda _, children: f"{children}",
     Tag("system", line_breaks=True),
 )
 
-Instructions = ContextComponent[TranscriptionProps](
-    lambda comp, props: f"""Transcribe the following {props.audio_format} audio in {props.language}.
+TranscriptionAssistantRole = ContextComponent.leaf(
+    lambda: f"You are a transcription assistant.",
+    Tag("your-role", line_breaks=False),
+)
+
+AudioInstructions = ContextComponent[TranscriptionProps](
+    lambda props, children: f"""Transcribe the following {props.audio_format} audio in {props.language}.
 Guidelines:
-{comp>>props.children}""",
+{children}""",
     Tag("instructions", line_breaks=True),
     list_delimitor=("", "\n"),
 )
 
-TranscriptOutput = ContextComponent[None](
-    lambda comp, props: "Provide the transcript below:"
+
+# Usage
+
+TranscriptionSystemPrompt = SystemPrompt(
+    {
+        "children": [
+            TranscriptionAssistantRole,
+            AudioInstructions(
+                TranscriptionProps(
+                    audio_format="mp3",
+                    language="English",
+                    children=[
+                        "- Include timestamps every 30 seconds",
+                        "- Mark speaker changes with [Speaker 1], [Speaker 2], etc.",
+                        "- Note any unclear audio as [inaudible]",
+                    ],
+                )
+            ),
+            TranscriptCTA,
+        ]
+    }
 )
 
 
-# Usage
-def build_transcription_prompt() -> str:
-    prompt = SystemPrompt.render(
-        {
-            "children": [
-                Instructions[
-                    TranscriptionProps(
-                        audio_format="mp3",
-                        language="English",
-                        children=[
-                            "- Include timestamps every 30 seconds",
-                            "- Mark speaker changes with [Speaker 1], [Speaker 2], etc.",
-                            "- Note any unclear audio as [inaudible]",
-                        ],
-                    )
-                ],
-                TranscriptOutput[None],
-            ]
-        }
-    )
-
-    return prompt
+TranscriptionSystemPrompt = SystemPrompt(
+    {
+        "children": [
+            TranscriptionAssistantRole,
+            AudioInstructions(
+                TranscriptionProps(
+                    audio_format="mp3",
+                    language="English",
+                    children=[
+                        "- Include timestamps every 30 seconds",
+                        "- Mark speaker changes with [Speaker 1], [Speaker 2], etc.",
+                        "- Note any unclear audio as [inaudible]",
+                    ],
+                )
+            ),
+            TranscriptCTA,
+        ]
+    }
+)
 
 
 if __name__ == "__main__":
-    result = build_transcription_prompt()
+    result = TranscriptionSystemPrompt.render()
     print(result)

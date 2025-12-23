@@ -26,7 +26,24 @@ class Tag:
             return f"{self.open}{inner}{self.close}"
 
 
-type Delimitor = Optional[str | Tag | Tuple[str, str]]
+class CodeBlock:
+    def __init__(self, language: str):
+        self.language = language
+
+    @property
+    def open(self):
+        return f"\n```{self.language}\n"
+
+    @property
+    def close(self):
+        return f"\n```\n"
+
+    def __call__(self, inner: str) -> str:
+        inner = inner.strip()
+        return f"{self.open}{inner}{self.close}"
+
+
+type Delimitor = Optional[str | Tag | CodeBlock | Tuple[str, str]]
 
 
 def wrap(inner: str, delimitor: Delimitor) -> str:
@@ -39,6 +56,8 @@ def wrap(inner: str, delimitor: Delimitor) -> str:
             return f"{d}{inner}{d}"
         case Tag() as t:
             return t(inner)
+        case CodeBlock() as b:
+            return b(inner)
 
 
 def is_children(value: Any) -> bool:
@@ -62,8 +81,8 @@ def get_children_from_props(props: Any) -> Children:
     return None
 
 
-# Arguments: component, props: P
-type RenderFn[P = None] = Callable[[ContextComponent[P], P], str]
+# Arguments: The first argument is props, the second argument is the string of the rendred children.
+type RenderFn[P = None] = Callable[[P, str], str]
 
 
 class ContextComponent[P]:
@@ -84,6 +103,17 @@ class ContextComponent[P]:
         self._list_delimitor = list_delimitor
         self._props_bound = props_bound
 
+    @classmethod
+    def leaf(
+        cls,
+        render: Callable[[], str],
+        delimitor: Delimitor = None,
+    ) -> ContextComponent[None]:
+        def render_fn(_: None, __: str) -> str:
+            return render()
+
+        return ContextComponent(render_fn, delimitor, None, props_bound=True)
+
     @property
     def props_bound(self):
         return self._props_bound
@@ -101,22 +131,19 @@ class ContextComponent[P]:
                 render_list = [self.render_children(child) for child in child_list]
         return "".join([wrap(s, self._list_delimitor) for s in render_list])
 
-    def __rshift__(self, children: Children):
-        return self.render_children(children)
-
-    def render(self, props: P):
-        inner = self.__render(self, props)
+    def render(self, props: P = None):
+        inner = self.__render(
+            props, self.render_children(get_children_from_props(props))
+        )
         return wrap(inner, self._delimitor)
 
     def pass_props(self, props: P) -> ContextComponent[None]:
-        def new_render(new_component: ContextComponent[None], no_props: None) -> str:
-            return self.__render(self, props)
+        def new_render(no_props: None, _: str) -> str:
+            return self.render(props)
 
-        return ContextComponent(
-            new_render, self._delimitor, self._list_delimitor, props_bound=True
-        )
+        return ContextComponent[None](new_render, None, None, props_bound=True)
 
-    def __getitem__(self, props: P) -> ContextComponent[None]:
+    def __call__(self, props: P) -> ContextComponent[None]:
         return self.pass_props(props)
 
 
