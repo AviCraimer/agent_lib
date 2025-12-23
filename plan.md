@@ -230,63 +230,120 @@ unsubscribe = store.subscribe(on_language_change)
 
 ### 6. Async Actions
 
-**Decision:** Separate async work from state mutation using `on_success`/`on_error` hooks.
+**Problem:** Can't snapshot during an await—other actions could run between the snapshot and the mutation, making the snapshot stale and change detection incorrect.
 
-**Problem:** Can't snapshot during an await—other actions could run, making snapshot stale.
+**Solution:** Async functions are **read-only**. They return a result that gets passed to a **sync handler** (`on_success`) which performs the actual state mutation with proper snapshot/diff/notify flow.
 
-**Solution:** Async function is read-only; it returns a result that gets passed to a sync action.
+#### Key Decisions
+
+1. **Hooks are handler functions, not Action objects or strings**
+   - `on_success` and `on_error` must be functions with signature `(state: S, payload: T) -> frozenset[str]`
+   - This is the same signature as sync action handlers
+   - Provides static type checking: the async function's return type must match `on_success`'s payload type
+   - NOT strings (no runtime lookup) and NOT Action objects (those are class attributes)
+
+2. **Bound async actions return `None`**
+   - Consistent with sync bound actions
+   - State changes flow through subscribers via Delta objects
+   - Prevents stale state from floating around in variables
+
+3. **Discovery via `AsyncAction` class**
+   - Similar to `Action`, create an `AsyncAction` class to wrap async handlers
+   - `AsyncAction` stores: the async handler, `on_success` handler, and optional `on_error` handler
+   - Discovered and bound in `_bind_actions()` via a helper `_bind_async_actions()` method
+
+4. **No `on_start` hook** (YAGNI for LLM apps)
+   - LLM apps are often headless/agent-to-agent
+   - Streaming responses don't need loading spinners
+   - If needed, call a sync action manually before the async action
+
+#### Usage Example
 
 ```python
-@Store.async_action(
-    on_success=set_transcription,  # sync action, receives result
-    on_error=set_error,            # sync action, receives exception (optional)
-)
-async def transcribe(state, audio_url):  # read-only access to state
-    text = await api.transcribe(audio_url)
-    return text  # passed to on_success
+# Define handlers as external functions for reuse and type checking
+def set_transcription(state: AppState, text: str) -> frozenset[str]:
+    state.transcription = text
+    return frozenset({"transcription"})
+
+def set_error(state: AppState, error: Exception) -> frozenset[str]:
+    state.error = str(error)
+    return frozenset({"error"})
+
+class TranscriptionStore(Store[AppState]):
+    # Can also use handler as standalone sync action
+    set_transcription = Store.action(set_transcription)
+
+    # Async action - hooks are handler functions, not Action objects
+    @Store.async_action(on_success=set_transcription, on_error=set_error)
+    @staticmethod
+    async def transcribe(state: AppState, url: str) -> str:
+        # Read-only access to state, no mutations here
+        text = await api.transcribe(url)
+        return text  # This becomes payload for on_success
+
+# Usage
+store = TranscriptionStore(AppState(...))
+await store.transcribe("http://example.com/audio.mp3")  # Returns None
+# State is updated, subscribers notified with Delta
 ```
 
-**Internal flow:**
+#### Internal Flow
+
 ```python
 async def _run_async_action(self, async_fn, on_success, on_error, payload):
     try:
-        # Async work (read-only, no snapshot)
+        # Async work (read-only, no snapshot taken here)
         result = await async_fn(self._state, payload)
-        # Sync mutation (snapshot → mutate → diff → notify)
-        self._run_bound_action(on_success, result)
+        # Sync mutation with full snapshot → mutate → diff → notify flow
+        delta = self._process_action(on_success, result)
+        self._notify_subscribers(delta)
     except Exception as e:
         if on_error:
-            self._run_bound_action(on_error, e)
+            delta = self._process_action(on_error, e)
+            self._notify_subscribers(delta)
         else:
             raise
 ```
 
-**Why no `on_start` hook?**
+#### Implementation Status
 
-LLM apps typically don't need loading spinners:
-- Often headless/agent-to-agent
-- Streaming responses (not loading → done)
-- If needed, call sync action manually before async
-
-**Implementation status:**
 - [x] Decided: two hooks (`on_success`, `on_error`)
+- [x] Decided: hooks are handler functions `(state, payload) -> frozenset[str]`, not strings or Actions
+- [x] Decided: bound async actions return `None`
 - [x] Decided: no `on_start` (YAGNI for LLM apps)
-- [ ] TODO: Implement `@Store.async_action` decorator
-  - [ ] Create `@staticmethod async_action(on_success, on_error=None)` on Store
-  - [ ] Return a decorator that wraps async function
-  - [ ] Wrapper should call `_run_async_action()` with captured hooks
-  - [ ] Ensure decorated function is bound to store instance (similar to `action`)
-  - [ ] Type annotations: accept `Callable[[S, T], Awaitable[R]]`, return bound async method
-  - [ ] Run `make types` to verify pyright accepts
-- [ ] TODO: Implement `_run_async_action()`
-  - [ ] Add method `async _run_async_action(self, async_fn, on_success, on_error, payload)`
-  - [ ] Call `await async_fn(self._state, payload)` to get result
-  - [ ] On success: call bound `on_success` action with result as payload
-  - [ ] On exception: if `on_error` provided, call it with exception; else re-raise
-  - [ ] Write unit test: async success path triggers `on_success`
-  - [ ] Write unit test: async error path triggers `on_error`
-  - [ ] Write unit test: async error with no `on_error` re-raises exception
+- [x] Decided: use `AsyncAction` class, discovered in `_bind_actions()` via `_bind_async_actions()`
 
+- [ ] TODO: Create `AsyncAction` class
+  - [ ] Create `src/agent_lib/store/AsyncAction.py`
+  - [ ] Generic class `AsyncAction[T, S, R]` where T=payload, S=state, R=result
+  - [ ] Store: `handler` (async fn), `on_success` (handler fn), `on_error` (optional handler fn)
+  - [ ] `__call__` raises error if accessed on class (like `Action`)
+
+- [ ] TODO: Implement `@Store.async_action` decorator
+  - [ ] `@staticmethod async_action(on_success, on_error=None)` returns decorator
+  - [ ] Decorator wraps async function and returns `AsyncAction` instance
+  - [ ] Type signature: `on_success: Callable[[S, R], frozenset[str]]`
+  - [ ] Type signature: `on_error: Callable[[S, Exception], frozenset[str]] | None`
+
+- [ ] TODO: Implement `_bind_async_actions()` in Store
+  - [ ] Called from `_bind_actions()`
+  - [ ] Discover `AsyncAction` attributes on class
+  - [ ] Create bound async method that calls `_run_async_action()`
+  - [ ] Bound method signature: `async (payload: T) -> None`
+
+- [ ] TODO: Implement `_run_async_action()` in Store
+  - [ ] `async def _run_async_action(self, async_action: AsyncAction, payload: Any) -> None`
+  - [ ] Call `await async_action.handler(self._state, payload)` to get result
+  - [ ] On success: `delta = self._process_action(async_action.on_success, result)`
+  - [ ] Call `self._notify_subscribers(delta)`
+  - [ ] On exception: if `on_error`, process it; else re-raise
+
+- [ ] TODO: Write unit tests
+  - [ ] Test: async success path triggers `on_success`, state updated, subscribers notified
+  - [ ] Test: async error path triggers `on_error` when provided
+  - [ ] Test: async error re-raises when no `on_error`
+  - [ ] Test: async action returns `None`
+  - [ ] Test: async action can read state but mutations in async fn don't trigger diff
 
 ---
 
