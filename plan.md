@@ -25,7 +25,7 @@ This document captures design decisions for the **Store** component of agent_lib
 
 Unlike Redux's immutability, we allow direct state mutation because:
 - Easier to write (no spread operators or `dataclasses.replace()` chains)
-- Python dataclasses are naturally mutable
+- PLthon dataclasses are naturally mutable
 - Change detection handled by diffing snapshots, not reference comparison
 
 **Implementation status:**
@@ -315,15 +315,21 @@ async def _run_async_action(self, async_fn, on_success, on_error, payload):
 
 - [ ] TODO: Create `AsyncAction` class
   - [ ] Create `src/agent_lib/store/AsyncAction.py`
-  - [ ] Generic class `AsyncAction[T, S, R]` where T=payload, S=state, R=result
+  - [ ] Generic class `AsyncAction[PL, St, R]` where PL=payload, St=state, R=result
   - [ ] Store: `handler` (async fn), `on_success` (handler fn), `on_error` (optional handler fn)
   - [ ] `__call__` raises error if accessed on class (like `Action`)
 
 - [ ] TODO: Implement `@Store.async_action` decorator
-  - [ ] `@staticmethod async_action(on_success, on_error=None)` returns decorator
-  - [ ] Decorator wraps async function and returns `AsyncAction` instance
-  - [ ] Type signature: `on_success: Callable[[S, R], frozenset[str]]`
-  - [ ] Type signature: `on_error: Callable[[S, Exception], frozenset[str]] | None`
+  - [ ] Full type signature:
+    ```python
+    @staticmethod
+    def async_action[St, PL, R](
+        on_success: Callable[[St, R], frozenset[str]],
+        on_error: Callable[[St, Exception], frozenset[str]] | None = None
+    ) -> Callable[[Callable[[St, PL], Coroutine[Any, Any, R]]], AsyncAction[PL, St, R]]:
+    ```
+  - [ ] Decorator factory: takes hooks, returns decorator
+  - [ ] Decorator wraps async function `(St, PL) -> Coroutine[..., R]` and returns `AsyncAction[PL, St, R]`
 
 - [ ] TODO: Implement `_bind_async_actions()` in Store
   - [ ] Called from `_bind_actions()`
@@ -387,7 +393,7 @@ class TranscriptionStore(Store[AppState]):
   - [ ] If passes: document as recommended pattern, update examples
   - [ ] If fails: note specific error for Option B investigation
 - [ ] If A fails, try descriptor approach
-  - [ ] Research Python descriptor protocol (`__get__`, `__set__`)
+  - [ ] Research PLthon descriptor protocol (`__get__`, `__set__`)
   - [ ] Modify `Action` class to implement `__get__` for instance binding
   - [ ] `__get__` should return bound method that doesn't include `self` in signature
   - [ ] Test with pyright
@@ -415,7 +421,7 @@ class Store[S]:
 ## Design Rationale (Context for Future Self)
 
 ### Why Mutation Over Immutability?
-Even Redux adopted Immer because writing immutable updates is tedious. In Python it's worse—no spread operators, `dataclasses.replace()` chains are verbose. Since we need snapshots anyway for change detection, we get the benefits of immutability (knowing what changed) without the DX cost.
+Even Redux adopted Immer because writing immutable updates is tedious. In PLthon it's worse—no spread operators, `dataclasses.replace()` chains are verbose. Since we need snapshots anyway for change detection, we get the benefits of immutability (knowing what changed) without the DX cost.
 
 ### Scope vs Changed Paths (Critical Distinction)
 The `frozenset[str]` returned by actions is **where to look**, NOT **what changed**. The action says "I touched `user.settings`" and the system diffs that subtree to find the actual leaf changes. This means:
@@ -451,11 +457,13 @@ Currently we deepcopy on every action. Potential optimization: only deepcopy whe
 ### Key Types
 
 ```python
-# Action handler signature
-(state: S, payload: T) -> frozenset[str]
+# Generic variable names: St=state, PL=payload, R=result
 
-# Async action signature
-async (state: S, payload: T) -> R  # R passed to on_success
+# Action handler signature
+(state: St, payload: PL) -> frozenset[str]
+
+# Async handler signature (read-only, returns result for on_success)
+async (state: St, payload: PL) -> R
 
 # Subscriber signature
 (delta: Delta) -> None
@@ -467,20 +475,25 @@ async (state: S, payload: T) -> R  # R passed to on_success
 ### Store API (planned)
 
 ```python
-class Store[S]:
+class Store[St]:
     # State access
-    def get(self) -> S
-    def set(self, state: S) -> None
+    def get(self) -> St
+    def set(self, state: St) -> None
 
     # Subscriptions
-    def subscribe(self, callback) -> Callable[[], None]
+    def subscribe(self, callback: Callable[[Delta], None]) -> Callable[[], None]
 
     # Decorators
     @staticmethod
-    def action(handler) -> Action
+    def action[St, PL](
+        handler: Callable[[St, PL], frozenset[str]]
+    ) -> Action[PL, St]
 
     @staticmethod
-    def async_action(on_success, on_error=None) -> Callable
+    def async_action[St, PL, R](
+        on_success: Callable[[St, R], frozenset[str]],
+        on_error: Callable[[St, Exception], frozenset[str]] | None = None
+    ) -> Callable[[Callable[[St, PL], Coroutine[Any, Any, R]]], AsyncAction[PL, St, R]]
 ```
 
 ### Dependencies
