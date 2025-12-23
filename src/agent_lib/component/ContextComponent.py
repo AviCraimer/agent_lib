@@ -126,8 +126,12 @@ class ContextComponent[P]:
         return ContextComponent(render_fn, delimitor, list_delimitor)
 
     @property
-    def props_bound(self):
+    def props_bound(self) -> bool:
         return self._props_bound
+
+    @property
+    def delimitor(self) -> Delimitor:
+        return self._delimitor
 
     def render_children(self, children: Children) -> str:
         render_list: list[str]
@@ -142,18 +146,17 @@ class ContextComponent[P]:
                 render_list = [self.render_children(child) for child in child_list]
         return "".join([wrap(s, self._list_delimitor) for s in render_list])
 
-    def _render(self, props: P = None, to_wrap: bool = True) -> str:
-        inner = self._render_fn(
+    def render_unwrapped(self, props: P = None) -> str:
+        return self._render_fn(
             props, self.render_children(get_children_from_props(props))
         )
-        return wrap(inner, self._delimitor) if to_wrap else inner
 
     def render(self, props: P = None) -> str:
-        return self._render(props, to_wrap=True)
+        return wrap(self.render_unwrapped(props), self._delimitor)
 
     def pass_props(self, props: P) -> ContextComponent[None]:
-        def new_render(no_props: None, _: str) -> str:
-            return self._render(props, to_wrap=False)
+        def new_render(_: None, __: str) -> str:
+            return self.render_unwrapped(props)
 
         return ContextComponent[None](
             new_render, self._delimitor, None, props_bound=True

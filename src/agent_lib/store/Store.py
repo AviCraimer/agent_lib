@@ -24,8 +24,8 @@ class Store[S]:
     ) -> ContextComponent[None]:
         def new_render(_: None, __: str) -> str:
             props = selector(self._state)
-            return component._render(props, to_wrap=False)
+            return component.render_unwrapped(props)
 
         return ContextComponent[None](
-            new_render, component._delimitor, None, props_bound=True
+            new_render, component.delimitor, None, props_bound=True
         )
