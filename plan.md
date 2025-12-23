@@ -32,6 +32,10 @@ Unlike Redux's immutability, we allow direct state mutation because:
 - [x] Decided: mutation-based approach
 - [x] Decided: use `copy.deepcopy()` for snapshots
 - [ ] TODO: Create `snapshot()` wrapper function for easy library swap later
+  - [ ] Create `src/agent_lib/store/snapshot.py`
+  - [ ] Define `def snapshot[S](state: S) -> S` using `copy.deepcopy`
+  - [ ] Add docstring noting this can be swapped for `duper`, pickle, or `orjson` later
+  - [ ] Import and use in Store instead of direct `copy.deepcopy` call
 
 ---
 
@@ -70,7 +74,12 @@ def set_language(state: AppState, lang: str) -> frozenset[str]:
 - [x] Decided: frozenset of paths
 - [x] Decided: empty set = no-op, root path = full diff
 - [x] Decided: helpers on `Action.scope`
-- [ ] TODO: Implement in Action class
+- [ ] TODO: Implement scope helpers in Action class
+  - [ ] Add nested `class scope` inside `Action`
+  - [ ] Define `no_op: ClassVar[frozenset[str]] = frozenset()`
+  - [ ] Define `full_diff: ClassVar[frozenset[str]] = frozenset({"."})`
+  - [ ] Update type annotations: handler returns `frozenset[str]`
+  - [ ] Run `make types` to verify pyright accepts
 
 ---
 
@@ -123,7 +132,19 @@ for row in delta.to_flat_rows():
 - [x] Decided: Delta for combining (supports `+` operator)
 - [x] Decided: glom for path-based access
 - [ ] TODO: Implement `_process_action()` in Store
+  - [ ] Add imports: `from deepdiff import DeepDiff, Delta` and `from glom import glom`
+  - [ ] Add method `_process_action(self, action: Callable, payload: Any) -> Delta`
+  - [ ] Call `snapshot()` before action runs
+  - [ ] Call action handler, capture returned scope
+  - [ ] Handle empty scope (no-op) → return `Delta({})`
+  - [ ] Loop through scope paths, glom subtrees, diff, combine with `+`
+  - [ ] Write unit test: action returns specific path, verify Delta contains change
+  - [ ] Write unit test: action returns `no_op`, verify empty Delta
+  - [ ] Write unit test: action returns `full_diff`, verify full state diffed
 - [ ] TODO: Add `deepdiff` and `glom` to dependencies
+  - [ ] Add to `pyproject.toml` under `[project.dependencies]`
+  - [ ] Run `make setup` to install
+  - [ ] Verify imports work: `python -c "from deepdiff import Delta; from glom import glom"`
 
 ---
 
@@ -148,6 +169,13 @@ class Store[S]:
 **Implementation status:**
 - [x] Decided: void return
 - [ ] TODO: Update `_bind_actions()` to use new flow
+  - [ ] Rename `_bind_actions()` to `_bind_actions()` (or keep name, update internals)
+  - [ ] Change bound function signature from `-> S` to `-> None`
+  - [ ] Replace direct `action.handler(self.get(), payload)` with `self._process_action()`
+  - [ ] Add call to `self._notify_subscribers(delta)` after processing
+  - [ ] Update `_actions` dict type annotation: `dict[str, Callable[..., None]]`
+  - [ ] Update existing example code in `transcription_with_store.py`
+  - [ ] Run `make types` to verify no type errors
 
 ---
 
@@ -186,6 +214,15 @@ unsubscribe = store.subscribe(on_language_change)
 - [x] Decided: subscribers receive Delta
 - [x] Decided: returns unsubscribe function
 - [ ] TODO: Implement `subscribe()` and `_notify_subscribers()`
+  - [ ] Add `_subscribers: list[Callable[[Delta], None]]` to Store `__init__`
+  - [ ] Implement `subscribe(self, callback) -> Callable[[], None]`
+  - [ ] Return lambda that removes callback from list
+  - [ ] Implement `_notify_subscribers(self, delta: Delta) -> None`
+  - [ ] Early return if `not delta.diff` (empty delta)
+  - [ ] Iterate subscribers, call each with delta
+  - [ ] Write unit test: subscribe, trigger action, verify callback received Delta
+  - [ ] Write unit test: unsubscribe, trigger action, verify callback NOT called
+  - [ ] Write unit test: no-op action does not trigger subscribers
 - [ ] Open: Add path-based subscription helpers? (e.g., `subscribe_path("user.*", cb)`)
 
 ---
@@ -234,13 +271,27 @@ LLM apps typically don't need loading spinners:
 - [x] Decided: two hooks (`on_success`, `on_error`)
 - [x] Decided: no `on_start` (YAGNI for LLM apps)
 - [ ] TODO: Implement `@Store.async_action` decorator
+  - [ ] Create `@staticmethod async_action(on_success, on_error=None)` on Store
+  - [ ] Return a decorator that wraps async function
+  - [ ] Wrapper should call `_run_async_action()` with captured hooks
+  - [ ] Ensure decorated function is bound to store instance (similar to `action`)
+  - [ ] Type annotations: accept `Callable[[S, T], Awaitable[R]]`, return bound async method
+  - [ ] Run `make types` to verify pyright accepts
 - [ ] TODO: Implement `_run_async_action()`
+  - [ ] Add method `async _run_async_action(self, async_fn, on_success, on_error, payload)`
+  - [ ] Call `await async_fn(self._state, payload)` to get result
+  - [ ] On success: call bound `on_success` action with result as payload
+  - [ ] On exception: if `on_error` provided, call it with exception; else re-raise
+  - [ ] Write unit test: async success path triggers `on_success`
+  - [ ] Write unit test: async error path triggers `on_error`
+  - [ ] Write unit test: async error with no `on_error` re-raises exception
+
 
 ---
 
-## Open Questions
+## Deferred / Future
 
-### 7. @staticmethod Requirement
+### @staticmethod Requirement
 
 **Problem:** Actions currently require awkward decorator stacking:
 
@@ -269,13 +320,21 @@ class TranscriptionStore(Store[AppState]):
     set_language = Store.action(set_language)
 ```
 
-**Status:**
-- [ ] TODO: Experiment with Option A and pyright
-- [ ] TODO: If A fails, try descriptor approach
+**Status: FOR LATER, IGNORE FOR NOW**
+- [ ] Experiment with Option A and pyright
+  - [ ] Create test file with external function + class assignment pattern
+  - [ ] Define plain function: `def set_language(state: AppState, lang: str) -> frozenset[str]`
+  - [ ] Assign in class body: `set_language = Store.action(set_language)`
+  - [ ] Run `make types` - check for pyright errors
+  - [ ] If passes: document as recommended pattern, update examples
+  - [ ] If fails: note specific error for Option B investigation
+- [ ] If A fails, try descriptor approach
+  - [ ] Research Python descriptor protocol (`__get__`, `__set__`)
+  - [ ] Modify `Action` class to implement `__get__` for instance binding
+  - [ ] `__get__` should return bound method that doesn't include `self` in signature
+  - [ ] Test with pyright
+  - [ ] If works: update `Action` class, document pattern
 
----
-
-## Deferred / Future
 
 ### History & Undo
 
@@ -292,6 +351,40 @@ class Store[S]:
 ```
 
 **Status:** Deferred until concrete use case arises.
+
+---
+
+## Design Rationale (Context for Future Self)
+
+### Why Mutation Over Immutability?
+Even Redux adopted Immer because writing immutable updates is tedious. In Python it's worse—no spread operators, `dataclasses.replace()` chains are verbose. Since we need snapshots anyway for change detection, we get the benefits of immutability (knowing what changed) without the DX cost.
+
+### Scope vs Changed Paths (Critical Distinction)
+The `frozenset[str]` returned by actions is **where to look**, NOT **what changed**. The action says "I touched `user.settings`" and the system diffs that subtree to find the actual leaf changes. This means:
+- Developer doesn't need to track every leaf mutation
+- System discovers actual changes via diff
+- More efficient than full-state diff when scope is narrow
+
+### Why Delta Over Raw DeepDiff?
+- Delta supports `+` operator for combining multiple diffs
+- Provides `.to_flat_rows()` for easy iteration
+- Can be applied to objects for replay/undo (future feature)
+- Raw DeepDiff results don't support combination
+
+### DeepDiff Path Format
+DeepDiff paths have `root.` prefix and may use bracket notation: `root['key']` or `root.key`. When diffing subtrees, paths are relative to subtree root. May need path normalization when presenting to subscribers.
+
+### Why glom?
+Glom uses dot-notation paths (`user.settings.language`) which is the same format we expose to users. It also supports the root path `"."` for full-state access.
+
+### No `dispatch()` Function
+Unlike Redux, we don't require manual dispatch. Actions are auto-bound to store instances on creation: `store.set_language("es")` instead of `store.dispatch(set_language, "es")`. See CLAUDE.md.
+
+### Why Subscriptions Not Re-Rendering?
+LLM apps generate context on-demand when agents are called—not reactively when state changes. Subscriptions are for triggering agent calls or side effects, not for re-rendering UI.
+
+### Performance Note
+Currently we deepcopy on every action. Potential optimization: only deepcopy when `self._subscribers` is non-empty. If no one's listening for changes, skip the snapshot/diff overhead.
 
 ---
 
@@ -343,9 +436,26 @@ class Store[S]:
 
 ## Next Steps
 
-1. [ ] Implement `_process_action()` with Delta support
-2. [ ] Update `_bind_actions()` for void return + notifications
-3. [ ] Implement `subscribe()` / `_notify_subscribers()`
-4. [ ] Experiment with external function assignment (pyright)
-5. [ ] Implement `@Store.async_action` decorator
-6. [ ] Add `deepdiff` and `glom` to pyproject.toml
+### Phase 1: Dependencies & Foundation
+1. [ ] Add `deepdiff` and `glom` to `pyproject.toml`
+2. [ ] Create `snapshot.py` wrapper module
+3. [ ] Add `Action.scope` helpers (`no_op`, `full_diff`)
+
+### Phase 2: Core Diffing
+4. [ ] Implement `_process_action()` with Delta support
+5. [ ] Write unit tests for `_process_action()`
+
+### Phase 3: Action Flow
+6. [ ] Update `_bind_actions()` for void return
+7. [ ] Implement `subscribe()` / `_notify_subscribers()`
+8. [ ] Write unit tests for subscriptions
+
+### Phase 4: Async Support
+9. [ ] Implement `@Store.async_action` decorator
+10. [ ] Implement `_run_async_action()`
+11. [ ] Write unit tests for async actions
+
+### Phase 5: DX Improvements
+12. [ ] Experiment with external function assignment (eliminate @staticmethod)
+13. [ ] Update examples with new patterns
+14. [ ] Update CLAUDE.md with new design decisions
