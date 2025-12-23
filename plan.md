@@ -169,14 +169,14 @@ class Store[S]:
 
 **Implementation status:**
 - [x] Decided: void return
-- [ ] TODO: Update `_bind_actions()` to use new flow
-  - [ ] Rename `_bind_actions()` to `_bind_actions()` (or keep name, update internals)
-  - [ ] Change bound function signature from `-> S` to `-> None`
-  - [ ] Replace direct `action.handler(self.get(), payload)` with `self._process_action()`
-  - [ ] Add call to `self._notify_subscribers(delta)` after processing
-  - [ ] Update `_actions` dict type annotation: `dict[str, Callable[..., None]]`
-  - [ ] Update existing example code in `transcription_with_store.py`
-  - [ ] Run `make types` to verify no type errors
+- [x] TODO: Update `_bind_actions()` to use new flow
+  - [x] Rename `_bind_actions()` to `_bind_actions()` (or keep name, update internals)
+  - [x] Change bound function signature from `-> S` to `-> None`
+  - [x] Replace direct `action.handler(self.get(), payload)` with `self._process_action()`
+  - [x] Add call to `self._notify_subscribers(delta)` after processing (stub added, full impl in Section 5)
+  - [x] Update `_actions` dict type annotation: `dict[str, Callable[..., None]]`
+  - [x] Update existing example code in `transcription_with_store.py` (no changes needed - example already worked)
+  - [x] Run `make types` to verify no type errors
 
 ---
 

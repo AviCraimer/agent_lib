@@ -12,7 +12,7 @@ from agent_lib.store.snapshot import snapshot
 
 class Store[S]:
     _state: S
-    _actions: dict[str, Callable[..., frozenset[str]]]
+    _actions: dict[str, Callable[..., None]]
 
     @staticmethod
     def action[T, St](handler: Callable[[St, T], frozenset[str]]) -> Action[T, St]:
@@ -32,9 +32,10 @@ class Store[S]:
             attr = getattr(type(self), name)
             if isinstance(attr, Action):
                 # Create bound action - captures self and attr
-                def make_bound(action: Action[Any, S]) -> Callable[..., frozenset[str]]:
-                    def bound(payload: Any) -> frozenset[str]:
-                        return action.handler(self.get(), payload)
+                def make_bound(action: Action[Any, S]) -> Callable[..., None]:
+                    def bound(payload: Any) -> None:
+                        delta = self._process_action(action.handler, payload)
+                        self._notify_subscribers(delta)
 
                     return bound
 
@@ -71,7 +72,11 @@ class Store[S]:
 
         return combined
 
-    def get_actions(self, *names: str) -> dict[str, Callable[..., frozenset[str]]]:
+    def _notify_subscribers(self, delta: Delta) -> None:
+        """Notify subscribers of state changes. Implemented in Section 5."""
+        pass  # Stub - will be implemented with subscription system
+
+    def get_actions(self, *names: str) -> dict[str, Callable[..., None]]:
         """Get bound actions by name. If no names provided, returns all actions."""
         if not names:
             return self._actions.copy()
@@ -94,13 +99,13 @@ class Store[S]:
     def connect[T](
         self,
         target: Action[T, S],
-    ) -> Callable[[T], frozenset[str]]: ...
+    ) -> Callable[[T], None]: ...
 
     def connect[P, T](
         self,
         target: ContextComponent[P] | Action[T, S],
         selector: Callable[[S], P] | None = None,
-    ) -> ContextComponent[None] | Callable[[T], frozenset[str]]:
+    ) -> ContextComponent[None] | Callable[[T], None]:
         if isinstance(target, ContextComponent):
             if selector is None:
                 raise ValueError("selector is required when connecting a component")
@@ -126,8 +131,9 @@ class Store[S]:
     def _connect_action[T](
         self,
         action: Action[T, S],
-    ) -> Callable[[T], frozenset[str]]:
-        def bound(payload: T) -> frozenset[str]:
-            return action.handler(self.get(), payload)
+    ) -> Callable[[T], None]:
+        def bound(payload: T) -> None:
+            delta = self._process_action(action.handler, payload)
+            self._notify_subscribers(delta)
 
         return bound
