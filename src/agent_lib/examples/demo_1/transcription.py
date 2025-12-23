@@ -1,34 +1,30 @@
 from agent_lib.component.ContextComponent import (
     Children,
     ContextComponent,
-    JustChildren,
     Tag,
 )
-
-
-# Props types
-class TranscriptionProps:
-    def __init__(self, audio_format: str, language: str, children: Children = None):
-        self.audio_format = audio_format
-        self.language = language
-        self.children = children
 
 
 TranscriptCTA = ContextComponent.leaf(
     lambda: "Provide the transcript below:", ("\n", "")
 )
 
-SystemPrompt = ContextComponent[JustChildren](
-    lambda _, children: f"{children}",
-    Tag("system", line_breaks=True),
-)
+SystemPrompt = ContextComponent.wrapper(Tag("system", line_breaks=True))
 
 TranscriptionAssistantRole = ContextComponent.leaf(
     lambda: f"You are a transcription assistant.",
     Tag("your-role", line_breaks=False),
 )
 
-AudioInstructions = ContextComponent[TranscriptionProps](
+
+class AudioProps:
+    def __init__(self, audio_format: str, language: str, children: Children = None):
+        self.audio_format = audio_format
+        self.language = language
+        self.children = children
+
+
+AudioInstructions = ContextComponent[AudioProps](
     lambda props, children: f"""Transcribe the following {props.audio_format} audio in {props.language}.
 Guidelines:
 {children}""",
@@ -44,7 +40,7 @@ TranscriptionSystemPrompt = SystemPrompt(
         "children": [
             TranscriptionAssistantRole,
             AudioInstructions(
-                TranscriptionProps(
+                AudioProps(
                     audio_format="mp3",
                     language="English",
                     children=[
@@ -65,7 +61,7 @@ TranscriptionSystemPrompt = SystemPrompt(
         "children": [
             TranscriptionAssistantRole,
             AudioInstructions(
-                TranscriptionProps(
+                AudioProps(
                     audio_format="mp3",
                     language="English",
                     children=[

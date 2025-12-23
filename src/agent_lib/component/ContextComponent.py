@@ -86,7 +86,7 @@ type RenderFn[P = None] = Callable[[P, str], str]
 
 
 class ContextComponent[P]:
-    __render: RenderFn[P]
+    _render_fn: RenderFn[P]
     _delimitor: Delimitor
     _list_delimitor: Delimitor
     _props_bound: bool
@@ -98,7 +98,7 @@ class ContextComponent[P]:
         list_delimitor: Delimitor = None,
         props_bound: bool = False,
     ):
-        self.__render = render
+        self._render_fn = render
         self._delimitor = delimitor
         self._list_delimitor = list_delimitor
         self._props_bound = props_bound
@@ -113,6 +113,17 @@ class ContextComponent[P]:
             return render()
 
         return ContextComponent(render_fn, delimitor, None, props_bound=True)
+
+    @classmethod
+    def wrapper(
+        cls,
+        delimitor: Delimitor = None,
+        list_delimitor: Delimitor = None,
+    ) -> ContextComponent[JustChildren]:
+        def render_fn(_: JustChildren, children: str) -> str:
+            return children
+
+        return ContextComponent(render_fn, delimitor, list_delimitor)
 
     @property
     def props_bound(self):
@@ -131,17 +142,22 @@ class ContextComponent[P]:
                 render_list = [self.render_children(child) for child in child_list]
         return "".join([wrap(s, self._list_delimitor) for s in render_list])
 
-    def render(self, props: P = None):
-        inner = self.__render(
+    def _render(self, props: P = None, to_wrap: bool = True) -> str:
+        inner = self._render_fn(
             props, self.render_children(get_children_from_props(props))
         )
-        return wrap(inner, self._delimitor)
+        return wrap(inner, self._delimitor) if to_wrap else inner
+
+    def render(self, props: P = None) -> str:
+        return self._render(props, to_wrap=True)
 
     def pass_props(self, props: P) -> ContextComponent[None]:
         def new_render(no_props: None, _: str) -> str:
-            return self.render(props)
+            return self._render(props, to_wrap=False)
 
-        return ContextComponent[None](new_render, None, None, props_bound=True)
+        return ContextComponent[None](
+            new_render, self._delimitor, None, props_bound=True
+        )
 
     def __call__(self, props: P) -> ContextComponent[None]:
         return self.pass_props(props)
