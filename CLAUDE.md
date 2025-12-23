@@ -1,5 +1,17 @@
 # Project Conventions for Claude Code
 
+## Intro
+
+This is an attemp to build a lightweight custom library for building LLM powered apps. It focuses on *context engineering* and *predictable state management*. It uses programming paradigms adapted from front-end web development tools like React and Redux. A key difference is that rendering context for LLMs does not require incremental updates since strings are lighter weight than DOM nodes. This simplifies rendering. Therefore, we are mainly borring the paradigms of component compositionality, prop-binding (React) as well as connecting to a single Store as a source of truth and updating through actions to provide controlled state mutation (Redux minus immutability).
+
+
+
+## Design Decisions
+
+- **JustChildren uses dict, not dataclass**: The `{"children": [...]}` pattern is intentional. It's simpler to type and doesn't require a special import. A dataclass would offer typo protection but the tradeoff isn't worth it for a single-field wrapper.
+
+- No `dispatch` function. We make a deliberate decision to avoid the Redux pattern of having to manually dispatch actions. Instead Actions are bound to a store when the store is created, and after that any call to that action automatically mutates the store.
+
 ## Package Structure
 
 This project uses **implicit namespace packages** (PEP 420). Do NOT add `__init__.py` files to any directories.
