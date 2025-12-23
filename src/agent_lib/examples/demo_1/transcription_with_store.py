@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from agent_lib.store.Store import Action, Store
+from agent_lib.store.Store import Store
 from agent_lib.examples.demo_1.transcription import (
     AudioInstructions,
     AudioProps,
@@ -19,27 +19,23 @@ class AppState:
     language: str
 
 
-# Actions (defined independently of any store)
+class TranscriptionStore(Store[AppState]):
+    @Store.action
+    @staticmethod
+    def set_language(state: AppState, lang: str) -> AppState:
+        state.language = lang
+        return state
 
-
-def _set_language(state: AppState, language: str) -> AppState:
-    state.language = language
-    return state
-
-
-def _set_format(state: AppState, fmt: str) -> AppState:
-    if fmt not in ["mp3", "wav", "flac"]:
-        raise ValueError(f"Unsupported format: {fmt}")
-    state.audio_format = fmt
-    return state
+    @Store.action
+    @staticmethod
+    def set_format(state: AppState, fmt: str) -> AppState:
+        state.audio_format = fmt
+        return state
 
 
 # Usage
-store = Store(AppState(audio_format="mp3", language="English"))
 
-# Connect actions to store
-set_language = store.connect(Action[str, AppState](_set_language))
-set_format = store.connect(Action[str, AppState](_set_format))
+store = TranscriptionStore(AppState(audio_format="mp3", language="English"))
 
 # Connect component to store
 BoundAudioInstructions = store.connect(
@@ -71,9 +67,9 @@ if __name__ == "__main__":
     print(TranscriptionSystemPrompt.render())
 
     print("\n=== After changing language to Spanish ===")
-    set_language("Spanish")
+    store.set_language("Spanish")  # Access via descriptor - auto-bound!
     print(TranscriptionSystemPrompt.render())
 
     print("\n=== After changing format to wav ===")
-    set_format("wav")
+    store.set_format("wav")  # Access via descriptor - auto-bound!
     print(TranscriptionSystemPrompt.render())

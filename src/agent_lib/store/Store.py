@@ -1,26 +1,48 @@
 from __future__ import annotations
 
-from typing import Callable, overload
+from typing import Any, Callable, overload
 
 from agent_lib.component.ContextComponent import ContextComponent
-
-
-class Action[T, S]:
-    """An action that can be connected to a store to mutate state.
-
-    T: The payload type
-    S: The state type
-    """
-
-    def __init__(self, handler: Callable[[S, T], S]):
-        self.handler = handler
+from agent_lib.store.Action import Action
 
 
 class Store[S]:
     _state: S
+    _actions: dict[str, Callable[..., S]]
+
+    @staticmethod
+    def action[T, St](handler: Callable[[St, T], St]) -> Action[T, St]:
+        """Decorator to define an action on a Store subclass."""
+        return Action(handler)
 
     def __init__(self, initial_state: S):
         self._state = initial_state
+        self._actions = {}
+        self._bind_actions()
+
+    def _bind_actions(self) -> None:
+        """Find all Action class attributes and bind them to this instance."""
+        for name in dir(type(self)):
+            if name.startswith("_"):
+                continue
+            attr = getattr(type(self), name)
+            if isinstance(attr, Action):
+                # Create bound action - captures self and attr
+                def make_bound(action: Action[Any, S]) -> Callable[..., S]:
+                    def bound(payload: Any) -> S:
+                        return action.handler(self.get(), payload)
+
+                    return bound
+
+                bound_action = make_bound(attr)
+                self._actions[name] = bound_action
+                setattr(self, name, bound_action)
+
+    def get_actions(self, *names: str) -> dict[str, Callable[..., S]]:
+        """Get bound actions by name. If no names provided, returns all actions."""
+        if not names:
+            return self._actions.copy()
+        return {n: self._actions[n] for n in names if n in self._actions}
 
     def get(self) -> S:
         return self._state
@@ -73,6 +95,6 @@ class Store[S]:
         action: Action[T, S],
     ) -> Callable[[T], S]:
         def bound(payload: T) -> S:
-            return action.handler(self._state, payload)
+            return action.handler(self.get(), payload)
 
         return bound
