@@ -80,6 +80,7 @@ def set_language(state: AppState, lang: str) -> frozenset[str]:
   - [ ] Define `full_diff: ClassVar[frozenset[str]] = frozenset({"."})`
   - [ ] Update type annotations: handler returns `frozenset[str]`
   - [ ] Run `make types` to verify pyright accepts
+  - [ ] Verify that example `src/agent_lib/examples/demo_1/transcription_with_store.py` still works with new action format.
 
 ---
 
