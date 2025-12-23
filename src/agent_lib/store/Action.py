@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, ClassVar
 
 
 class Action[T, S]:
@@ -8,12 +8,24 @@ class Action[T, S]:
 
     T: The payload type
     S: The state type
+
+    Actions mutate state and return a frozenset of paths indicating where they mutated.
+    This "scope" tells the system which subtrees to diff for change detection.
     """
 
-    def __init__(self, handler: Callable[[S, T], S]):
+    class scope:
+        """Helper constants for action return values (avoid magic strings)."""
+
+        no_op: ClassVar[frozenset[str]] = frozenset()
+        """Return this when action made no changes - skips diff and notifications."""
+
+        full_diff: ClassVar[frozenset[str]] = frozenset({"."})
+        """Return this when scope is unknown - diffs entire state tree."""
+
+    def __init__(self, handler: Callable[[S, T], frozenset[str]]):
         self.handler = handler
 
-    def __call__(self, payload: T) -> S:
+    def __call__(self, payload: T) -> frozenset[str]:
         # This is only called if accessed on the class directly (not via instance)
         raise RuntimeError(
             "Action must be accessed via a Store instance, not the class. "

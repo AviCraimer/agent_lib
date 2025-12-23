@@ -74,13 +74,13 @@ def set_language(state: AppState, lang: str) -> frozenset[str]:
 - [x] Decided: frozenset of paths
 - [x] Decided: empty set = no-op, root path = full diff
 - [x] Decided: helpers on `Action.scope`
-- [ ] TODO: Implement scope helpers in Action class
-  - [ ] Add nested `class scope` inside `Action`
-  - [ ] Define `no_op: ClassVar[frozenset[str]] = frozenset()`
-  - [ ] Define `full_diff: ClassVar[frozenset[str]] = frozenset({"."})`
-  - [ ] Update type annotations: handler returns `frozenset[str]`
-  - [ ] Run `make types` to verify pyright accepts
-  - [ ] Verify that example `src/agent_lib/examples/demo_1/transcription_with_store.py` still works with new action format.
+- [x] TODO: Implement scope helpers in Action class
+  - [x] Add nested `class scope` inside `Action`
+  - [x] Define `no_op: ClassVar[frozenset[str]] = frozenset()`
+  - [x] Define `full_diff: ClassVar[frozenset[str]] = frozenset({"."})`
+  - [x] Update type annotations: handler returns `frozenset[str]`
+  - [x] Run `make types` to verify pyright accepts
+  - [x] Verify that example `src/agent_lib/examples/demo_1/transcription_with_store.py` still works with new action format.
 
 ---
 

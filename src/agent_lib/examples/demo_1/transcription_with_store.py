@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-from agent_lib.store.Store import Store
 from agent_lib.examples.demo_1.transcription import (
     AudioInstructions,
     AudioProps,
@@ -8,6 +7,8 @@ from agent_lib.examples.demo_1.transcription import (
     TranscriptCTA,
     TranscriptionAssistantRole,
 )
+from agent_lib.store.Action import Action
+from agent_lib.store.Store import Store
 
 
 # State
@@ -22,15 +23,19 @@ class AppState:
 class TranscriptionStore(Store[AppState]):
     @Store.action
     @staticmethod
-    def set_language(state: AppState, lang: str) -> AppState:
+    def set_language(state: AppState, lang: str) -> frozenset[str]:
+        if state.language == lang:
+            return Action.scope.no_op
         state.language = lang
-        return state
+        return frozenset({"language"})
 
     @Store.action
     @staticmethod
-    def set_format(state: AppState, fmt: str) -> AppState:
+    def set_format(state: AppState, fmt: str) -> frozenset[str]:
+        if state.audio_format == fmt:
+            return Action.scope.no_op
         state.audio_format = fmt
-        return state
+        return frozenset({"audio_format"})
 
 
 # Usage
