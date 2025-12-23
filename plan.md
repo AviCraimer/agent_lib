@@ -37,7 +37,12 @@ Agents are triggered by state changes, not direct calls. This enables:
 
 ```python
 @dataclass
-class AgentState[Config]:
+class ModelConfig:
+    """Base config - all agent configs must have context field."""
+    context: str = ""
+
+@dataclass
+class AgentState[Config: ModelConfig]:
     should_act: bool = False
     currently_availale_actions: set(str) # The currently availabe actions. This can change dynamically based on agent actions. Must be a subset of availabe_actions.
     availabe_actions: set(str) # Names of async or sync actions the Store.  This cannot change based on agent actions. It allows setting hard safety limits on what an agent can do.
@@ -49,14 +54,18 @@ There could be an initializer for AgentState, where you pass in the agent instan
 
 ```python
 @dataclass
-class AppState:
-    agents: {
-        agent_a: AgentState
-        agent_b: AgentState
-    }
+class AgentsState:
+    """Each app defines its own AgentsState with typed agent fields."""
+    translator: AgentState[TranslatorConfig]
+    summarizer: AgentState[SummarizerConfig]
 
+@dataclass
+class AppState:
+    agents: AgentsState
     # ... shared state
 ```
+
+Access: `state.agents.translator.should_act = True`
 
 Flow:
 1. Something sets `state.agent_a.should_act = True`
@@ -89,7 +98,7 @@ state.translator.urgent_translate = True  # Or this
 #### Agent Components
 
 ```python
-class Agent[Config]:
+class Agent[Config: ModelConfig]:
     # Static context - rendered once at init, good for prompt caching
     static_context: str
 
@@ -99,6 +108,9 @@ class Agent[Config]:
     # Available actions (by name)
     actions: set[str]
     generating_function: Coroutine[[Config], str]
+
+    @staticmethod
+    get_agent_state: Callable[[],AgentState[Config]]
 
     # Text generation (provider-specific)
     # An agent has an async text generating function. This has a generic argument Config which includes any prompts, message history, etc. I'm not going to specify any common format for this because LLM providers have different interfaces and they are changing all the time. But Config should have a field called "context" which can be mapped to the modle providor API anyway the developer likes.
@@ -110,7 +122,8 @@ class Agent[Config]:
 
 
     # Execute the agent. Agent executes until its should act is set to false.
-    exec(self, get_agent_state: Callable[[], AgentState]):
+    exec(self):
+        get_agent_state = self.get_agent_state
 
         while get_agent_state().should_act:
             res = await self.generate(get_agent_state().current_config)
@@ -125,7 +138,191 @@ class Agent[Config]:
 
 Tools are just async actions with metadata. A `ToolsContext` component can render available tools into the agent's context, pulling tool info from state if needed for dynamic tool sets.
 
+#### Agent receives actions
 
+Agent receives bound actions (from AIApp during wiring — see Section 2):
+
+```python
+class Agent[Config: ModelConfig]:
+    actions: dict[str, BoundAction[Any]]  # name -> bound action, set by AIApp
+```
+
+#### parse_result Implementation
+
+```python
+import json
+from inspect import iscoroutinefunction
+
+def parse_result(self, result: str) -> tuple[BoundAction[Any], Any]:
+    """Parse LLM output to extract action name and payload."""
+    # Assumes LLM returns JSON like: {"action": "search_tool", "payload": {"query": "..."}}
+    parsed = json.loads(result)
+    action_name = parsed["action"]
+    payload = parsed["payload"]
+
+    if action_name not in self.actions:
+        raise ValueError(f"Unknown action: {action_name}")
+    if action_name not in get_agent_state().currently_available_actions:
+        raise ValueError(f"Action not currently available: {action_name}")
+
+    return self.actions[action_name], payload
+
+# In exec loop, check if async:
+action, payload = self.parse_result(res)
+if iscoroutinefunction(action):
+    await action(payload)
+else:
+    action(payload)
+```
+
+#### Error Handling in exec()
+
+```python
+async def exec(self, get_agent_state: Callable[[], AgentState]):
+    while get_agent_state().should_act:
+        try:
+            res = await self.generate(get_agent_state().current_config)
+            if not get_agent_state().should_act:
+                break
+            action, payload = self.parse_result(res)
+            if iscoroutinefunction(action):
+                await action(payload)
+            else:
+                action(payload)
+        except json.JSONDecodeError:
+            # LLM returned invalid JSON - could retry or set error state
+            pass
+        except ValueError as e:
+            # Unknown/unavailable action - could retry or set error state
+            pass
+```
+
+#### Type Correction
+
+```python
+# Correct type for generating_function
+generating_function: Callable[[Config], Coroutine[Any, Any, str]]
+
+# Not: Coroutine[[Config], str] (that's the return value, not the function)
+```
+
+
+
+---
+
+## 2. AIApp Class
+
+Orchestration layer that wires Agents to the Store.
+
+```python
+class AIApp[S]:
+    store: Store[S]
+    agents: dict[str, Agent]
+    _tasks: list[asyncio.Task]
+
+    def __init__(self, store: Store[S], agents: list[Agent]):
+        self.store = store
+        self.agents = {agent.name: agent for agent in agents}
+        self._tasks = []
+        self._validate()
+        self._wire_agents()
+
+    def _validate(self):
+        """Validate that all agents have valid action references, etc."""
+        for name, agent in self.agents.items():
+            # Check agent's actions exist in store
+            store_actions = set(self.store.get_actions().keys())
+            if not agent.action_names.issubset(store_actions):
+                missing = agent.action_names - store_actions
+                raise ValueError(f"Agent '{name}' references unknown actions: {missing}")
+
+    def _wire_agents(self):
+        """Set get_agent_state selector and actions on each agent."""
+        for name, agent in self.agents.items():
+            # Create closure for this agent's state selector
+            def make_selector(agent_name: str):
+                return lambda: getattr(self.store.get().agents, agent_name)
+            agent.get_agent_state = make_selector(name)
+            agent.actions = self.store.get_actions(*agent.action_names)
+
+    async def run(self):
+        """Start all agent exec loops."""
+        for agent in self.agents.values():
+            task = asyncio.create_task(agent.exec())
+            self._tasks.append(task)
+        # Wait for all (they run forever until shutdown)
+        await asyncio.gather(*self._tasks)
+
+    async def shutdown(self):
+        """Stop all agent loops."""
+        for agent in self.agents.values():
+            agent.running = False  # Agent checks this in exec loop
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+```
+
+**Wiring happens at init:**
+- `get_agent_state` selector set on each Agent
+- Bound actions provided to each Agent
+- No subscriber-based triggering — agents poll via their exec loop
+
+**Agent exec loop (polling):**
+```python
+async def exec(self):
+    self.running = True
+    while self.running:
+        if not self.get_agent_state().should_act:
+            await asyncio.sleep(0.1)  # Poll interval
+            continue
+        # ... do work
+```
+
+**Orchestration rules (what subscribers are for):**
+
+Subscribers handle algorithmic agent triggering — react to state and set `should_act`:
+
+```python
+class AIApp[S]:
+    orchestration_rules: list[Callable[[S, Delta], None]]
+
+    def _setup_orchestration(self):
+        def on_change(delta: Delta):
+            state = self.store.get()
+            for rule in self.orchestration_rules:
+                rule(state, delta)
+        self.store.subscribe(on_change)
+
+# Example rules:
+def trigger_summarizer_on_new_doc(state: AppState, delta: Delta) -> None:
+    """When new document arrives, summarizer should act."""
+    if 'documents' in str(delta.diff):
+        state.agents.summarizer.should_act = True
+
+def chain_translator_after_summary(state: AppState, delta: Delta) -> None:
+    """When summary is ready, trigger translator."""
+    if 'summary' in str(delta.diff) and state.summary:
+        state.agents.translator.should_act = True
+```
+
+**Separation of concerns:**
+- **Polling loop**: Agent checks if it should act
+- **Orchestration rules**: React to state changes, flip `should_act` flags
+- **Agent logic**: What to do when acting (generate, parse, call actions)
+
+**Responsibilities:**
+- Validate agent/store compatibility at startup
+- Wire `get_agent_state` selectors and actions to agents
+- Set up orchestration rules (subscribers)
+- Start/stop all agent exec loops
+- Optional persistance of state to file, database, etc.
+- Graceful shutdown
+
+**Open questions:**
+- Poll interval: configurable per agent?
+- Should AIApp own the Store, or receive it?
+- How to handle agent-specific error callbacks?
+- Should orchestration rules be passed to AIApp init, or defined elsewhere?
 
 ---
 
