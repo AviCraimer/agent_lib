@@ -132,20 +132,20 @@ for row in delta.to_flat_rows():
 - [x] Decided: DeepDiff for diffing
 - [x] Decided: Delta for combining (supports `+` operator)
 - [x] Decided: glom for path-based access
-- [ ] TODO: Implement `_process_action()` in Store
-  - [ ] Add imports: `from deepdiff import DeepDiff, Delta` and `from glom import glom`
-  - [ ] Add method `_process_action(self, action: Callable, payload: Any) -> Delta`
-  - [ ] Call `snapshot()` before action runs
-  - [ ] Call action handler, capture returned scope
-  - [ ] Handle empty scope (no-op) → return `Delta({})`
-  - [ ] Loop through scope paths, glom subtrees, diff, combine with `+`
-  - [ ] Write unit test: action returns specific path, verify Delta contains change
-  - [ ] Write unit test: action returns `no_op`, verify empty Delta
-  - [ ] Write unit test: action returns `full_diff`, verify full state diffed
-- [ ] TODO: Add `deepdiff` and `glom` to dependencies
-  - [ ] Add to `pyproject.toml` under `[project.dependencies]`
-  - [ ] Run `make setup` to install
-  - [ ] Verify imports work: `python -c "from deepdiff import Delta; from glom import glom"`
+- [x] TODO: Implement `_process_action()` in Store
+  - [x] Add imports: `from deepdiff import DeepDiff, Delta` and `from glom import T, glom`
+  - [x] Add method `_process_action(self, handler: Callable, payload: Any) -> Delta`
+  - [x] Call `snapshot()` before action runs
+  - [x] Call action handler, capture returned scope
+  - [x] Handle empty scope (no-op) → return `Delta({})`
+  - [x] Loop through scope paths, glom subtrees, diff, combine with `+` (note: uses `T` for root access when path is ".")
+  - [x] Write unit test: action returns specific path, verify Delta contains change
+  - [x] Write unit test: action returns `no_op`, verify empty Delta
+  - [x] Write unit test: action returns `full_diff`, verify full state diffed
+- [x] TODO: Add `deepdiff` and `glom` to dependencies
+  - [x] Add to `pyproject.toml` under `[project.dependencies]`
+  - [x] Run `make setup` to install
+  - [x] Verify imports work: `python -c "from deepdiff import Delta; from glom import glom"`
 
 ---
 

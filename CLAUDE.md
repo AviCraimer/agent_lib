@@ -35,3 +35,11 @@ Use the Makefile for common tasks:
 - `make lint` - Run linter
 - `make check` - Run all checks
 - `make run` - Run the CLI entry point
+
+
+## Unit Tests
+
+Any units tests should be added to `/tests` while mirroring the directory structure of `src/agent_lib`. For example, a test file for `src/agent_lib/store/Store.py` should be under `test/store`.
+
+Add the suffix `_LLM` to any test file you generate. This will allow the development team to track which tests are written (or validated by) humans and which are written by LLMs. Unless given explicit permission, never add tests or modify tests inside an existing test file which does not end in `_LLM.py`.
+

@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, overload
 
+from deepdiff import DeepDiff, Delta
+from glom import T, glom
+
 from agent_lib.component.ContextComponent import ContextComponent
 from agent_lib.store.Action import Action
+from agent_lib.store.snapshot import snapshot
 
 
 class Store[S]:
@@ -37,6 +41,35 @@ class Store[S]:
                 bound_action = make_bound(attr)
                 self._actions[name] = bound_action
                 setattr(self, name, bound_action)
+
+    def _process_action(
+        self, handler: Callable[[S, Any], frozenset[str]], payload: Any
+    ) -> Delta:
+        """Run action handler and return Delta representing all changes.
+
+        Args:
+            handler: The action handler function (state, payload) -> scope
+            payload: The payload to pass to the handler
+
+        Returns:
+            Delta object containing all changes, or empty Delta for no-op
+        """
+        state_snapshot = snapshot(self._state)
+        scope = handler(self._state, payload)
+
+        if not scope:  # no-op
+            return Delta({})
+
+        combined = Delta({})
+        for scope_path in scope:
+            # Use T for root access when path is "."
+            spec = T if scope_path == "." else scope_path
+            old_subtree = glom(state_snapshot, spec)
+            new_subtree = glom(self._state, spec)
+            diff = DeepDiff(old_subtree, new_subtree)
+            combined = combined + Delta(diff)
+
+        return combined
 
     def get_actions(self, *names: str) -> dict[str, Callable[..., frozenset[str]]]:
         """Get bound actions by name. If no names provided, returns all actions."""
