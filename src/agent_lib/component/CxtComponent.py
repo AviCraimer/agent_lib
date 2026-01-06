@@ -190,54 +190,48 @@ class ItemsProps(Props):
     )
 
 
-class Items(CtxComponent[ItemsProps]):
-    _PropsClass = ItemsProps
+def Items_render_fn(props: ItemsProps) -> str:
 
-    def __init__(self):
+    if props.children:  # We intentionlly exclude the empty list for this case.
+        rest = props.children
+        first_wrapper = (
+            props.first_wrapper
+            if props.first_wrapper
+            else (
+                props.last_wrapper
+                if props.last_wrapper and len(rest) == 1
+                else props.item_wrapper
+            )
+        )
 
-        def render_fn(props: ItemsProps):
+        last_wrapper = (
+            props.last_wrapper
+            if props.last_wrapper and len(rest) > 1
+            else props.item_wrapper
+        )
 
-            if props.children:  # We intentionlly exclude the empty list for this case.
-                rest = props.children
-                first_wrapper = (
-                    props.first_wrapper
-                    if props.first_wrapper
-                    else (
-                        props.last_wrapper
-                        if props.last_wrapper and len(rest) == 1
-                        else props.item_wrapper
-                    )
-                )
+        first: str = first_wrapper(rest[0]).render()
+        rest = rest[1:]
 
-                last_wrapper = (
-                    props.last_wrapper
-                    if props.last_wrapper and len(rest) > 1
-                    else props.item_wrapper
-                )
+        last: str = last_wrapper(rest[-1]).render() if rest else ""
 
-                first: str = first_wrapper(rest[0]).render()
-                rest = rest[1:]
+        rest = rest[:-1]
 
-                last: str = last_wrapper(rest[-1]).render() if rest else ""
+        rendered_rest = (
+            "".join([props.item_wrapper(c).render() for c in rest]) if rest else ""
+        )
 
-                rest = rest[:-1]
+        return "".join([first, rendered_rest, last])
+    else:
+        return ""
 
-                rendered_rest = (
-                    "".join([props.item_wrapper(c).render() for c in rest])
-                    if rest
-                    else ""
-                )
 
-                return "".join([first, rendered_rest, last])
-            else:
-                return ""
-
-        self._render_fn = render_fn
+Items = CtxComponent(Items_render_fn, ItemsProps)
 
 
 Paragraph = CtxComponent.wrapper(("", "\n\n"))
 
-Paragraphs = Items().preset(
+Paragraphs = Items.preset(
     ItemsProps(item_wrapper=Paragraph, last_wrapper=CtxComponent.wrapper(""))
 )
 
