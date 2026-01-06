@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, dataclass_transform
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
-    from agent_lib.component.ContextComponent import Children
+    from agent_lib.component.CxtComponent import Children
 
 
 @dataclass_transform(frozen_default=True, kw_only_default=True)
