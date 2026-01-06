@@ -5,7 +5,7 @@ from typing import Any, Callable, overload
 
 from deepdiff import DeepDiff, Delta
 
-from agent_lib.component.ContextComponent import ContextComponent
+from agent_lib.component.ContextComponent import CtxComponent
 from agent_lib.store.Action import Action
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.snapshot import snapshot
@@ -171,9 +171,9 @@ class Store[S]:
     @overload
     def connect[P](
         self,
-        target: ContextComponent[P],
+        target: CtxComponent[P],
         selector: Callable[[S], P],
-    ) -> ContextComponent[None]: ...
+    ) -> CtxComponent[None]: ...
 
     @overload
     def connect[T](
@@ -183,10 +183,10 @@ class Store[S]:
 
     def connect[P, T](
         self,
-        target: ContextComponent[P] | Action[T, S],
+        target: CtxComponent[P] | Action[T, S],
         selector: Callable[[S], P] | None = None,
-    ) -> ContextComponent[None] | Callable[[T], None]:
-        if isinstance(target, ContextComponent):
+    ) -> CtxComponent[None] | Callable[[T], None]:
+        if isinstance(target, CtxComponent):
             if selector is None:
                 raise ValueError("selector is required when connecting a component")
             return self._connect_component(target, selector)
@@ -197,14 +197,14 @@ class Store[S]:
 
     def _connect_component[P](
         self,
-        component: ContextComponent[P],
+        component: CtxComponent[P],
         selector: Callable[[S], P],
-    ) -> ContextComponent[None]:
+    ) -> CtxComponent[None]:
         def new_render(_: None, __: str) -> str:
             props = selector(self._state)
             return component.render_unwrapped(props)
 
-        return ContextComponent[None](
+        return CtxComponent[None](
             new_render, component.delimitor, None, props_bound=True
         )
 

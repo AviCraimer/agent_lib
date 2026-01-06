@@ -1,169 +1,178 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, Optional, Tuple, cast
+from dataclasses import dataclass
+
+from typing import Any, Callable, Tuple, TypeGuard, cast
+
+from agent_lib.component.Props import Props, NoProps, JustChildren
 
 
-type Children = ContextComponent[None] | str | None | list[Children]
+type RequiredChildren = CtxComponent[NoProps] | str | list[Children]
 
+type Children = RequiredChildren | None
 
-class Tag:
-    def __init__(self, tag: str, line_breaks: bool):
-        self.tag = tag
-        self.line_breaks = line_breaks
-
-    @property
-    def open(self):
-        return f"<{self.tag}>"
-
-    @property
-    def close(self):
-        return f"</{self.tag}>"
-
-    def __call__(self, inner: str) -> str:
-        if self.line_breaks:
-            return f"\n{self.open}\n{inner}\n{self.close}\n"
-        else:
-            return f"{self.open}{inner}{self.close}"
-
-
-class CodeBlock:
-    def __init__(self, language: str):
-        self.language = language
-
-    @property
-    def open(self):
-        return f"\n```{self.language}\n"
-
-    @property
-    def close(self):
-        return f"\n```\n"
-
-    def __call__(self, inner: str) -> str:
-        inner = inner.strip()
-        return f"{self.open}{inner}{self.close}"
-
-
-type Delimitor = Optional[str | Tag | CodeBlock | Tuple[str, str]]
+# A delimitor is either a string or a pair of strings. The pair of strings is used when opening and closing are different.
+type Delimitor = str | Tuple[str, str]
 
 
 def wrap(inner: str, delimitor: Delimitor) -> str:
     match delimitor:
-        case None:
-            return inner
         case (str() as open, str() as close):
             return f"{open}{inner}{close}"
         case str() as d:
             return f"{d}{inner}{d}"
-        case Tag() as t:
-            return t(inner)
-        case CodeBlock() as b:
-            return b(inner)
 
 
-def is_children(value: Any) -> bool:
+def is_children(value: Any) -> TypeGuard[Children]:
     if value is None or isinstance(value, str):
         return True
-    if isinstance(value, ContextComponent) and value.props_bound:
+    if isinstance(value, CtxComponent) and value.props_bound:
         return True
     if isinstance(value, list):
         return all(is_children(item) for item in value)
     return False
 
 
-def get_children_from_props(props: Any) -> Children:
-    # Handle dict-like props
-    if isinstance(props, dict):
-        if "children" in props and is_children(props["children"]):
-            return cast(Children, props["children"])
-    # Handle class instances
-    elif hasattr(props, "children") and is_children(props.children):
-        return cast(Children, props.children)
-    return None
+# Arguments: The first argument is props
+type RenderFn[P: Props] = Callable[[P], str]
 
 
-# Arguments: The first argument is props, the second argument is the string of the rendred children.
-type RenderFn[P = None] = Callable[[P, str], str]
-
-
-class ContextComponent[P]:
+class CtxComponent[P: Props]:
     _render_fn: RenderFn[P]
-    _delimitor: Delimitor
-    _list_delimitor: Delimitor
     _props_bound: bool
+    _PropsClass: type[P]
 
     def __init__(
-        self,
-        render: RenderFn[P],
-        delimitor: Delimitor = None,
-        list_delimitor: Delimitor = None,
-        props_bound: bool = False,
+        self, render: RenderFn[P], props_class: type[P], props_bound: bool = False
     ):
         self._render_fn = render
-        self._delimitor = delimitor
-        self._list_delimitor = list_delimitor
         self._props_bound = props_bound
+        self._PropsClass = props_class  # This should be overridden for subclasses with the actual props constructor
 
     @classmethod
     def leaf(
         cls,
         render: Callable[[], str],
-        delimitor: Delimitor = None,
-    ) -> ContextComponent[None]:
-        def render_fn(_: None, __: str) -> str:
+    ) -> CtxComponent[NoProps]:
+        def render_fn(_: NoProps = NoProps()) -> str:
             return render()
 
-        return ContextComponent(render_fn, delimitor, None, props_bound=True)
+        return CtxComponent(render_fn, NoProps, props_bound=True)
 
     @classmethod
     def wrapper(
         cls,
-        delimitor: Delimitor = None,
-        list_delimitor: Delimitor = None,
-    ) -> ContextComponent[JustChildren]:
-        def render_fn(_: JustChildren, children: str) -> str:
-            return children
+    ) -> CtxComponent[JustChildren]:
+        def render_fn(props: JustChildren) -> str:
+            return CtxComponent.render_children(props.children)
 
-        return ContextComponent(render_fn, delimitor, list_delimitor)
+        return CtxComponent(render_fn, JustChildren)
 
     @property
     def props_bound(self) -> bool:
         return self._props_bound
 
-    @property
-    def delimitor(self) -> Delimitor:
-        return self._delimitor
-
-    def render_children(self, children: Children) -> str:
+    @staticmethod
+    def render_children(children: Children, list_item_delimitor: Delimitor = "") -> str:
         render_list: list[str]
         match children:
             case None:
                 render_list = [""]
             case str() as s:
                 render_list = [s]
-            case ContextComponent() as component:
-                render_list = [component.render(None)]
+            case CtxComponent() as component:
+                render_list = [component.render(NoProps())]
             case list() as child_list:
-                render_list = [self.render_children(child) for child in child_list]
-        return "".join([wrap(s, self._list_delimitor) for s in render_list])
+                render_list = [
+                    CtxComponent.render_children(child) for child in child_list
+                ]
+        # Note to self: I may remove the delimitor entirelty for now it's just here for reference.
+        return "".join([wrap(s, list_item_delimitor) for s in render_list])
 
-    def render_unwrapped(self, props: P = None) -> str:
-        return self._render_fn(
-            props, self.render_children(get_children_from_props(props))
-        )
+    def render(self, props: P = NoProps()) -> str:
+        return self._render_fn(props)
 
-    def render(self, props: P = None) -> str:
-        return wrap(self.render_unwrapped(props), self._delimitor)
+    def pass_props(self, props: P | Children) -> CtxComponent[NoProps]:
+        if is_children(props):
+            try:
+                _props: P = self._PropsClass(children=props)
+            except:
+                raise ValueError(
+                    "Could not construct props object from the passed children object. You may need to construct the full props object and passs it in."
+                )
+        else:
+            props = cast(P, props)
+            _props = props
 
-    def pass_props(self, props: P) -> ContextComponent[None]:
-        def new_render(_: None, __: str) -> str:
-            return self.render_unwrapped(props)
+        def new_render(_: NoProps) -> str:
+            return self.render(_props)
 
-        return ContextComponent[None](
-            new_render, self._delimitor, None, props_bound=True
-        )
+        return CtxComponent[NoProps](new_render, NoProps, props_bound=True)
 
-    def __call__(self, props: P) -> ContextComponent[None]:
+    def __call__(self, props: P | Children) -> CtxComponent[NoProps]:
         return self.pass_props(props)
 
 
-type JustChildren = dict[Literal["children"], Children]
+@dataclass(frozen=True)
+class TagProps(Props):
+    children: Children
+    line_breaks: bool = False
+
+
+class Tag(CtxComponent[TagProps]):
+    _PropsClass = TagProps
+
+    def __init__(self, tag: str):
+        self.tag = tag
+
+        def render_fn(props: TagProps):
+            open_tag = self.get_tag(props, True)
+            close_tag = self.get_tag(props, False)
+            return wrap(
+                CtxComponent.render_children(props.children, ""), (open_tag, close_tag)
+            )
+
+        self._render_fn = render_fn
+        self._props_bound = False  # Once props are bound it is no longer a Tag component but becomes CtxComponent[NoProps].
+        # Question: Perhaps for debugging we need to remember the name of the component class that was used before the props were bound?
+
+    def get_tag(self, props: TagProps, open: bool):
+        line_break = "\n" if props.line_breaks else ""
+        slash = "" if open else "/"
+        tag = f"{line_break}<{slash}{self.tag}>{line_break}"
+        return tag
+
+
+# class CodeBlock:
+#     def __init__(self, language: str):
+#         self.language = language
+
+#     @property
+#     def open(self):
+#         return f"\n```{self.language}\n"
+
+#     @property
+#     def close(self):
+#         return f"\n```\n"
+
+#     def __call__(self, inner: str) -> str:
+#         inner = inner.strip()
+#         return f"{self.open}{inner}{self.close}"
+
+
+if __name__ == "__main__":
+    h1_tag = Tag("h1")
+
+    print(h1_tag("My Title").render())
+
+    system_prompt_tag = Tag("system")
+    example_sys_prompt = system_prompt_tag(
+        TagProps(
+            children=[
+                h1_tag(["Important Instructions", " for you.", None]),
+                "\nYou are a nice person!",
+            ],
+            line_breaks=True,
+        )
+    )
+    print(example_sys_prompt.render())

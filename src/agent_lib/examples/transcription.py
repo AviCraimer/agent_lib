@@ -1,17 +1,15 @@
 from agent_lib.component.ContextComponent import (
     Children,
-    ContextComponent,
+    CtxComponent,
     Tag,
 )
 
 
-TranscriptCTA = ContextComponent.leaf(
-    lambda: "Provide the transcript below:", ("\n", "")
-)
+TranscriptCTA = CtxComponent.leaf(lambda: "Provide the transcript below:", ("\n", ""))
 
-SystemPrompt = ContextComponent.wrapper(Tag("system", line_breaks=True))
+SystemPrompt = CtxComponent.wrapper(Tag("system", line_breaks=True))
 
-TranscriptionAssistantRole = ContextComponent.leaf(
+TranscriptionAssistantRole = CtxComponent.leaf(
     lambda: f"You are a transcription assistant.",
     Tag("your-role", line_breaks=False),
 )
@@ -24,7 +22,7 @@ class AudioProps:
         self.children = children
 
 
-AudioInstructions = ContextComponent[AudioProps](
+AudioInstructions = CtxComponent[AudioProps](
     lambda props, children: f"""Transcribe the following {props.audio_format} audio in {props.language}.
 Guidelines:
 {children}""",
