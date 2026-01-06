@@ -5,9 +5,9 @@ from anthropic.types import MessageParam, TextBlock, ContentBlock
 from agent_lib.environment import anthropic_api_key
 
 CLAUDE_MODELS = {
-    "sonnet": "claude-sonnet-4-5-latest",
-    "haiku": "claude-haiku-4-5-latest",
-    "opus": "claude-opus-4-5-latest",
+    "sonnet": "claude-sonnet-4-5",
+    "haiku": "claude-haiku-4-5",
+    "opus": "claude-opus-4-5",
 }
 
 type ModelSize = Literal["sonnet", "haiku", "opus"]
@@ -20,12 +20,17 @@ class ChatMessage(TypedDict):
 
 # Core Claude interaction
 class ClaudeClient:
+    model_name: str
+
     def __init__(self, api_key: str, model: ModelSize = "haiku"):
         self.client = anthropic.Anthropic(api_key=api_key)
+        self.set_model(model)
+
+    def set_model(self, model: ModelSize):
         self.model_name = CLAUDE_MODELS[model]
 
-    @classmethod
-    def clean_messages_(cls, history: list[ChatMessage]) -> list[MessageParam]:
+    @staticmethod
+    def clean_messages_(history: list[ChatMessage]) -> list[MessageParam]:
         """
         Ensures only user and assistant messages are in message list.
         """
@@ -47,18 +52,18 @@ class ClaudeClient:
         system_prompt: str,
         max_tokens: int = 1024,
         temperature: float = 0.7,
-        top_p: float = 0.95,
+        # top_p: float = 0.95,
     ) -> str:
 
         try:
 
-            cleaned_messages = self.__class__.clean_messages_(messages)
+            cleaned_messages = ClaudeClient.clean_messages_(messages)
 
             content: ContentBlock = self.client.messages.create(
                 model=self.model_name,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                top_p=top_p,
+                # top_p=top_p,
                 system=system_prompt,
                 messages=cleaned_messages,
             ).content[0]

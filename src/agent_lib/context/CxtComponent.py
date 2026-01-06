@@ -4,7 +4,7 @@ from dataclasses import replace
 import re
 from typing import Any, Callable, Tuple, TypeGuard, cast
 
-from agent_lib.component.Props import Props, NoProps, JustChildren, propsclass
+from agent_lib.context.Props import Props, NoProps, JustChildren, propsclass
 
 
 type RequiredChildren = CtxComponent[NoProps] | str | list[Children]
