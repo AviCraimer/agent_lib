@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
+from dataclasses import replace
+import re
 from typing import Any, Callable, Tuple, TypeGuard, cast
 
-from agent_lib.component.Props import Props, NoProps, JustChildren
+from agent_lib.component.Props import Props, NoProps, JustChildren, propsclass
 
 
 type RequiredChildren = CtxComponent[NoProps] | str | list[Children]
@@ -26,7 +26,7 @@ def wrap(inner: str, delimitor: Delimitor) -> str:
 def is_children(value: Any) -> TypeGuard[Children]:
     if value is None or isinstance(value, str):
         return True
-    if isinstance(value, CtxComponent) and value.props_bound:
+    if isinstance(value, CtxComponent) and CtxComponent.is_renderable(value):
         return True
     if isinstance(value, list):
         return all(is_children(item) for item in value)
@@ -39,14 +39,10 @@ type RenderFn[P: Props] = Callable[[P], str]
 
 class CtxComponent[P: Props]:
     _render_fn: RenderFn[P]
-    _props_bound: bool
     _PropsClass: type[P]
 
-    def __init__(
-        self, render: RenderFn[P], props_class: type[P], props_bound: bool = False
-    ):
+    def __init__(self, render: RenderFn[P], props_class: type[P]):
         self._render_fn = render
-        self._props_bound = props_bound
         self._PropsClass = props_class  # This should be overridden for subclasses with the actual props constructor
 
     @classmethod
@@ -57,7 +53,7 @@ class CtxComponent[P: Props]:
         def render_fn(_: NoProps = NoProps()) -> str:
             return render()
 
-        return CtxComponent(render_fn, NoProps, props_bound=True)
+        return CtxComponent(render_fn, NoProps)
 
     @classmethod
     def wrapper(
@@ -68,9 +64,9 @@ class CtxComponent[P: Props]:
 
         return CtxComponent(render_fn, JustChildren)
 
-    @property
-    def props_bound(self) -> bool:
-        return self._props_bound
+    @staticmethod
+    def is_renderable(comp: Any) -> TypeGuard[CtxComponent[NoProps]]:
+        return isinstance(comp, CtxComponent) and comp._PropsClass == NoProps
 
     @staticmethod
     def render_children(children: Children, list_item_delimitor: Delimitor = "") -> str:
@@ -98,7 +94,7 @@ class CtxComponent[P: Props]:
                 _props: P = self._PropsClass(children=props)
             except:
                 raise ValueError(
-                    "Could not construct props object from the passed children object. You may need to construct the full props object and passs it in."
+                    "Could not construct props object from the passed children object. You may need to construct the full props object and pass it in."
                 )
         else:
             props = cast(P, props)
@@ -107,23 +103,30 @@ class CtxComponent[P: Props]:
         def new_render(_: NoProps) -> str:
             return self.render(_props)
 
-        return CtxComponent[NoProps](new_render, NoProps, props_bound=True)
+        return CtxComponent[NoProps](new_render, NoProps)
+
+    def preset(self, props: P) -> CtxComponent[JustChildren]:
+        """This method lets you pass all the props other than children. Useful to avoid repeatly configuring component instances which vary only in their children."""
+
+        def new_render(children_props: JustChildren) -> str:
+            return self.render(replace(props, children=children_props.children))
+
+        return CtxComponent[JustChildren](new_render, JustChildren)
 
     def __call__(self, props: P | Children) -> CtxComponent[NoProps]:
         return self.pass_props(props)
 
 
-@dataclass(frozen=True)
+@propsclass
 class TagProps(Props):
-    children: Children
+    tag: str
     line_breaks: bool = False
 
 
 class Tag(CtxComponent[TagProps]):
     _PropsClass = TagProps
 
-    def __init__(self, tag: str):
-        self.tag = tag
+    def __init__(self):
 
         def render_fn(props: TagProps):
             open_tag = self.get_tag(props, True)
@@ -133,46 +136,61 @@ class Tag(CtxComponent[TagProps]):
             )
 
         self._render_fn = render_fn
-        self._props_bound = False  # Once props are bound it is no longer a Tag component but becomes CtxComponent[NoProps].
+
         # Question: Perhaps for debugging we need to remember the name of the component class that was used before the props were bound?
 
     def get_tag(self, props: TagProps, open: bool):
         line_break = "\n" if props.line_breaks else ""
         slash = "" if open else "/"
-        tag = f"{line_break}<{slash}{self.tag}>{line_break}"
+        tag = f"{line_break}<{slash}{props.tag}>{line_break}"
         return tag
 
 
-# class CodeBlock:
-#     def __init__(self, language: str):
-#         self.language = language
+@propsclass
+class CodeBlockProps(Props):
+    language: str
 
-#     @property
-#     def open(self):
-#         return f"\n```{self.language}\n"
 
-#     @property
-#     def close(self):
-#         return f"\n```\n"
+class CodeBlock(CtxComponent[CodeBlockProps]):
+    _PropsClass = CodeBlockProps
 
-#     def __call__(self, inner: str) -> str:
-#         inner = inner.strip()
-#         return f"{self.open}{inner}{self.close}"
+    def __init__(self):
+
+        def render_fn(props: CodeBlockProps):
+
+            code = CodeBlock.strip_code_block(
+                CtxComponent.render_children(props.children, "")
+            )
+
+            return f"```{props.language}\n{code}\n```"
+
+        self._render_fn = render_fn
+
+    @staticmethod
+    def strip_code_block(code: str) -> str:
+        """Strip existing code block fences if present."""
+        stripped = code.strip()
+
+        pattern = r"^```[a-zA-Z0-9]*\n(.*)\n```$"
+        match = re.match(pattern, stripped, re.DOTALL)
+
+        if match:
+            return match.group(1)
+
+        return code
 
 
 if __name__ == "__main__":
-    h1_tag = Tag("h1")
+    h1_tag = Tag().preset(TagProps(tag="h1"))
 
     print(h1_tag("My Title").render())
 
-    system_prompt_tag = Tag("system")
+    system_prompt_tag = Tag().preset(TagProps(tag="system", line_breaks=True))
+
     example_sys_prompt = system_prompt_tag(
-        TagProps(
-            children=[
-                h1_tag(["Important Instructions", " for you.", None]),
-                "\nYou are a nice person!",
-            ],
-            line_breaks=True,
-        )
+        [
+            h1_tag(["Important Instructions", " for you.", None]),
+            "\nYou are a nice person!",
+        ]
     )
     print(example_sys_prompt.render())
