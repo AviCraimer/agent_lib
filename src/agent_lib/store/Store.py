@@ -16,22 +16,55 @@ class Store:
     _actions: dict[str, Callable[..., None]]
     _subscribers: list[Callable[[Delta], None]]
 
-    @classmethod
-    def action[PL](
-        cls: type[Self], handler: Callable[[Self, PL], frozenset[str]]
-    ) -> Action[Self, PL]:
-        """Decorator to define an action on a Store subclass."""
+    @staticmethod
+    def action[S: Store, PL](
+        handler: Callable[[S, PL], frozenset[str]],
+    ) -> Action[S, PL]:
+        """Decorator to define an action method on a Store subclass.
+        Usage:
+            class MyStore(Store):
+                @Store.action
+                def set_value(self, value: str) -> frozenset[str]:
+                    self.value = value
+                    return frozenset({"value"})
+
+        How typing works:
+            The type parameter `S` is inferred from the decorated method's `self` parameter. When `self` is not explicitly annotated, Python's type checker infers it as `Self` (the enclosing class), so `S` correctly resolves to the Store subclass (e.g., `MyStore`).
+
+        Failure mode:
+            If you explicitly annotate `self` with a superclass type, the type checker will use that instead. This compiles but loses subclass type information. However, this is rarely an issue in practice since developers almost never explicitly annotate `self`.
+        """
         return Action(handler)
 
-    @classmethod
-    def async_action[PL, R](
-        cls: type[Self],
-        on_success: Callable[[Self, R], frozenset[str]],
-        on_error: Callable[[Self, Exception], frozenset[str]] | None = None,
-    ) -> Callable[
-        [Callable[[Self, PL], Coroutine[Any, Any, R]]], AsyncAction[Self, PL, R]
-    ]:
+    @staticmethod
+    def async_action[S: Store, PL, R](
+        on_success: Callable[[S, R], frozenset[str]],
+        on_error: Callable[[S, Exception], frozenset[str]] | None = None,
+    ) -> Callable[[Callable[[S, PL], Coroutine[Any, Any, R]]], AsyncAction[S, PL, R]]:
         """Decorator factory to define an async action on a Store subclass.
+
+        Usage:
+            class MyStore(Store):
+                @Store.async_action(
+                    on_success=lambda self, data: (
+                        setattr(self, "data", data) or frozenset({"data"})
+                    )
+                )
+                async def fetch_data(self, url: str) -> dict:
+                    async with aiohttp.get(url) as resp:
+                        return await resp.json()
+
+        How typing works:
+            The type parameter `S` is inferred from the `on_success` callback's
+            first parameter and/or the decorated method's `self` parameter.
+            When `self` is not explicitly annotated, it defaults to `Self`
+            (the enclosing class), so `S` correctly resolves to the Store
+            subclass.
+
+        Failure mode:
+            Same as `@Store.action` - explicitly annotating `self` with a
+            superclass type will lose subclass type information. This is
+            rarely an issue since developers almost never annotate `self`.
 
         Args:
             on_success: Handler called with async result to mutate state
@@ -42,8 +75,8 @@ class Store:
         """
 
         def decorator(
-            handler: Callable[[Self, PL], Coroutine[Any, Any, R]],
-        ) -> AsyncAction[Self, PL, R]:
+            handler: Callable[[S, PL], Coroutine[Any, Any, R]],
+        ) -> AsyncAction[S, PL, R]:
             return AsyncAction(handler, on_success, on_error)
 
         return decorator
@@ -188,10 +221,8 @@ class Store:
             if selector is None:
                 raise ValueError("selector is required when connecting a component")
             return self._connect_component(target, selector)
-        elif isinstance(target, Action):
-            return self._connect_action(target)
         else:
-            raise TypeError(f"Cannot connect {type(target)}")
+            return self._connect_action(target)
 
     def _connect_component[P: Props](
         self,
