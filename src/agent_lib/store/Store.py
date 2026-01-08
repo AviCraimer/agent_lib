@@ -36,51 +36,6 @@ class Store:
         """
         return Action(handler)
 
-    @staticmethod
-    def async_action[S: Store, PL, R](
-        on_success: Callable[[S, R], frozenset[str]],
-        on_error: Callable[[S, Exception], frozenset[str]] | None = None,
-    ) -> Callable[[Callable[[S, PL], Coroutine[Any, Any, R]]], AsyncAction[S, PL, R]]:
-        """Decorator factory to define an async action on a Store subclass.
-
-        Usage:
-            class MyStore(Store):
-                @Store.async_action(
-                    on_success=lambda self, data: (
-                        setattr(self, "data", data) or frozenset({"data"})
-                    )
-                )
-                async def fetch_data(self, url: str) -> dict:
-                    async with aiohttp.get(url) as resp:
-                        return await resp.json()
-
-        How typing works:
-            The type parameter `S` is inferred from the `on_success` callback's
-            first parameter and/or the decorated method's `self` parameter.
-            When `self` is not explicitly annotated, it defaults to `Self`
-            (the enclosing class), so `S` correctly resolves to the Store
-            subclass.
-
-        Failure mode:
-            Same as `@Store.action` - explicitly annotating `self` with a
-            superclass type will lose subclass type information. This is
-            rarely an issue since developers almost never annotate `self`.
-
-        Args:
-            on_success: Handler called with async result to mutate state
-            on_error: Optional handler called with exception to mutate state
-
-        Returns:
-            Decorator that wraps async function into AsyncAction
-        """
-
-        def decorator(
-            handler: Callable[[S, PL], Coroutine[Any, Any, R]],
-        ) -> AsyncAction[S, PL, R]:
-            return AsyncAction(handler, on_success, on_error)
-
-        return decorator
-
     def __init__(self) -> None:
         self._actions = {}
         self._subscribers = []
@@ -118,15 +73,15 @@ class Store:
                     async_action: AsyncAction[Self, Any, Any],
                 ) -> Callable[..., Coroutine[Any, Any, None]]:
                     async def bound(payload: Any) -> None:
-                        await self._run_async_action(async_action, payload)
+                        await self.run_async_action(async_action, payload)
 
                     return bound
 
                 bound_action = make_bound(attr)
                 setattr(self, name, bound_action)
 
-    async def _run_async_action(
-        self, async_action: AsyncAction[Self, Any, Any], payload: Any
+    async def run_async_action(
+        self, async_action: AsyncAction[Any, Any, Any], payload: Any
     ) -> None:
         """Execute async action and process result through on_success/on_error.
 
@@ -141,7 +96,8 @@ class Store:
             delta = self._process_action(async_action.on_success, result)
             self._notify_subscribers(delta)
         except Exception as e:
-            if async_action.on_error:
+            # Check if on_error was overridden from the default no-op
+            if type(async_action).on_error is not AsyncAction.on_error:
                 delta = self._process_action(async_action.on_error, e)
                 self._notify_subscribers(delta)
             else:
