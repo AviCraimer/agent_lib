@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from collections.abc import Coroutine
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
+
+if TYPE_CHECKING:
+    from agent_lib.store.Store import Store
 
 
-class AsyncAction[PL, St, R]:
+class AsyncAction[S: Store, PL, R]:
     """An async action that can be defined as a class attribute on a Store subclass.
 
+    S: The store type (S will be a sub-class of Store)
     PL: The payload type (input to async handler)
-    St: The state type
     R: The result type (returned by async handler, passed to on_success)
 
     Async actions perform read-only async work and return a result.
@@ -16,15 +19,15 @@ class AsyncAction[PL, St, R]:
     This separation ensures proper snapshot/diff/notify flow for state changes.
     """
 
-    handler: Callable[[St, PL], Coroutine[Any, Any, R]]
-    on_success: Callable[[St, R], frozenset[str]]
-    on_error: Callable[[St, Exception], frozenset[str]] | None
+    handler: Callable[[S, PL], Coroutine[Any, Any, R]]
+    on_success: Callable[[S, R], frozenset[str]]
+    on_error: Callable[[S, Exception], frozenset[str]] | None
 
     def __init__(
         self,
-        handler: Callable[[St, PL], Coroutine[Any, Any, R]],
-        on_success: Callable[[St, R], frozenset[str]],
-        on_error: Callable[[St, Exception], frozenset[str]] | None = None,
+        handler: Callable[[S, PL], Coroutine[Any, Any, R]],
+        on_success: Callable[[S, R], frozenset[str]],
+        on_error: Callable[[S, Exception], frozenset[str]] | None = None,
     ):
         self.handler = handler
         self.on_success = on_success

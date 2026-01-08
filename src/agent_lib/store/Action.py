@@ -1,17 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Coroutine
-from typing import Any, Callable, ClassVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
+
+if TYPE_CHECKING:
+    from agent_lib.store.Store import Store
 
 # Type alias for bound actions (after binding to a Store instance)
 type BoundAction[T] = Callable[[T], None] | Callable[[T], Coroutine[Any, Any, None]]
 
 
-class Action[T, S]:
+class Action[S: Store, PL]:
     """An action that can be defined as a class attribute on a Store subclass.
 
-    T: The payload type
-    S: The state type
+    S: The store type (S will be a sub-class of Store)
+    PL: The payload type
 
     Actions mutate state and return a frozenset of paths indicating where they mutated.
     This "scope" tells the system which subtrees to diff for change detection.
@@ -26,10 +29,10 @@ class Action[T, S]:
         full_diff: ClassVar[frozenset[str]] = frozenset({"."})
         """Return this when scope is unknown - diffs entire state tree."""
 
-    def __init__(self, handler: Callable[[S, T], frozenset[str]]):
+    def __init__(self, handler: Callable[[S, PL], frozenset[str]]):
         self.handler = handler
 
-    def __call__(self, payload: T) -> frozenset[str]:
+    def __call__(self, payload: PL) -> frozenset[str]:
         # This is only called if accessed on the class directly (not via instance)
         raise RuntimeError(
             "You've tried to call an unbound action. The action is callable after being bound to a store instance."
