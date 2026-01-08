@@ -6,6 +6,7 @@ from typing import Any, Self, overload
 from deepdiff import DeepDiff, Delta
 
 from agent_lib.context.CxtComponent import CtxComponent
+from agent_lib.context.Props import NoProps, Props
 from agent_lib.store.Action import Action
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.snapshot import snapshot
@@ -27,7 +28,9 @@ class Store:
         cls: type[Self],
         on_success: Callable[[Self, R], frozenset[str]],
         on_error: Callable[[Self, Exception], frozenset[str]] | None = None,
-    ) -> Callable[[Callable[[Self, PL], Coroutine[Any, Any, R]]], AsyncAction[Self, PL, R]]:
+    ) -> Callable[
+        [Callable[[Self, PL], Coroutine[Any, Any, R]]], AsyncAction[Self, PL, R]
+    ]:
         """Decorator factory to define an async action on a Store subclass.
 
         Args:
@@ -164,11 +167,11 @@ class Store:
         return {n: self._actions[n] for n in names if n in self._actions}
 
     @overload
-    def connect[P](
+    def connect[P: Props](
         self,
         target: CtxComponent[P],
         selector: Callable[[Self], P],
-    ) -> CtxComponent[None]: ...
+    ) -> CtxComponent[NoProps]: ...
 
     @overload
     def connect[T](
@@ -176,11 +179,11 @@ class Store:
         target: Action[Self, T],
     ) -> Callable[[T], None]: ...
 
-    def connect[P, T](
+    def connect[P: Props, T](
         self,
         target: CtxComponent[P] | Action[Self, T],
         selector: Callable[[Self], P] | None = None,
-    ) -> CtxComponent[None] | Callable[[T], None]:
+    ) -> CtxComponent[NoProps] | Callable[[T], None]:
         if isinstance(target, CtxComponent):
             if selector is None:
                 raise ValueError("selector is required when connecting a component")
@@ -190,18 +193,16 @@ class Store:
         else:
             raise TypeError(f"Cannot connect {type(target)}")
 
-    def _connect_component[P](
+    def _connect_component[P: Props](
         self,
         component: CtxComponent[P],
         selector: Callable[[Self], P],
-    ) -> CtxComponent[None]:
-        def new_render(_: None, __: str) -> str:
+    ) -> CtxComponent[NoProps]:
+        def new_render(_: NoProps) -> str:
             props = selector(self)
-            return component.render_unwrapped(props)
+            return component.render(props)
 
-        return CtxComponent[None](
-            new_render, component.delimitor, None, props_bound=True
-        )
+        return CtxComponent[NoProps](new_render, NoProps)
 
     def _connect_action[T](
         self,
