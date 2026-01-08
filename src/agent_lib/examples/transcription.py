@@ -1,4 +1,4 @@
-from agent_lib.component.ContextComponent import (
+from agent_lib.component.CxtComponent import (
     Children,
     CtxComponent,
     Tag,

@@ -43,3 +43,56 @@ Any units tests should be added to `/tests` while mirroring the directory struct
 
 Add the suffix `_LLM` to any test file you generate. This will allow the development team to track which tests are written (or validated by) humans and which are written by LLMs. Unless given explicit permission, never add tests or modify tests inside an existing test file which does not end in `_LLM.py`.
 
+## Python Type Hints 3.13+ Syntax Few Shot Learning
+
+Where-ever possible, use the newer Python syntax for type hints. Please correct older syntax when you find the old syntax in a file you are working on anyway.
+
+❌OLD SYNTAX
+```python
+from typing import List, Optional, Union, TypeVar, Generic, Callable, Dict, Any
+
+T = TypeVar("T")
+Vector = List[float]
+
+class Node(Generic[T]):
+    def __init__(self, val: T, children: Optional[List["Node"]] = None):
+        self.children = children
+
+    # Returns class using string quotes
+    def add(self, other: Union["Node", int]) -> "Node":
+        ...
+
+def process(func: Callable[[int], int], data: Dict[str, Any]) -> Vector:
+    ...
+```
+
+✅ NEW SYNTAX
+```python
+from __future__ import annotations
+from collections.abc import Callable
+from typing import Self, Any
+
+type Vector = list[float]
+
+class Node[T]:
+    def __init__(self, val: T, children: list[Node] | None = None):
+        self.children = children
+
+    # using unquoted class type (future annotations) in the argument and using Self for correct sub-class typing in the return.
+    def add(self, other: Node | int) -> Self:
+        ...
+
+def process(func: Callable[[int], int], data: dict[str, Any]) -> Vector:
+    ...
+```
+
+❌OLD SYTNAX
+```python
+S = TypeVar("S", bound=str)
+def text_proc(val: S) -> S: ...
+```
+
+✅ NEW SYNTAX
+```python
+def text_proc[S: str](val: S) -> S: ...
+```

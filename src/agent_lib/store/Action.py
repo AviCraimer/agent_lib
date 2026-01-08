@@ -32,6 +32,6 @@ class Action[T, S]:
     def __call__(self, payload: T) -> frozenset[str]:
         # This is only called if accessed on the class directly (not via instance)
         raise RuntimeError(
-            "Action must be accessed via a Store instance, not the class. "
-            "Use store.action_name() instead of StoreClass.action_name()"
+            "You've tried to call an unbound action. The action is callable after being bound to a store instance."
+            "i.e., use store.my_bound_action(payload) instead of my_unbound_action(payload)."
         )

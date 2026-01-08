@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Coroutine
-from typing import Any, Callable, overload
+from collections.abc import Coroutine, Callable
+from typing import Any, overload
 
 from deepdiff import DeepDiff, Delta
 
-from agent_lib.component.ContextComponent import CtxComponent
+from agent_lib.context.CxtComponent import CtxComponent
 from agent_lib.store.Action import Action
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.snapshot import snapshot
