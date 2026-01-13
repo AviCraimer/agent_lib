@@ -1,4 +1,7 @@
+# A simple example of how to make a reusable Async Action and attach it to a store.
+
 from __future__ import annotations
+
 
 import asyncio
 from dataclasses import dataclass

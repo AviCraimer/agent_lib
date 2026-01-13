@@ -9,22 +9,11 @@ This is the next big task.
 
 ### Design Decisions
 
-#### Tools = Async Actions
-
-No new primitive needed. The `@Store.async_action` pattern already supports tools:
-
-```python
-@Store.async_action(on_success=handle_search_result)
-@staticmethod
-async def search_tool(state: AppState, query: str) -> SearchResult:
-    return await external_search_api(query)  # Tool call (async, external)
-
-def handle_search_result(state: AppState, result: SearchResult) -> frozenset[str]:
-    state.search_results = result  # Sync state update
-    return frozenset({"search_results"})
-```
-
-A "tool" is just an async action with descriptive metadata (name, description) that gets rendered into the agent's context. The async handler does the external work, `on_success` updates state.
+When we are thinking about how to make a complex app with multiple agents, it might be helpful to have a way for stores to be compositional.
+  What I mean is that a store instance may need to be built out of other store instances. For example, If you have an app with three agents,
+  you might have a part of the store for each agent, and a shared part of the store. In that case, you'd want to be able to build the
+  agent-specific stores with the individual agenets and then assemble the peices together into the whole app. You need to be able to mix and
+  match. Is this kind of design pattern something we can just do with out existing set up, or is something missing?
 
 #### State-Triggered Execution
 
