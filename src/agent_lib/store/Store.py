@@ -5,6 +5,7 @@ from typing import Any, Self, cast, overload
 
 from deepdiff import DeepDiff, Delta, parse_path
 
+from agent_lib.agent.AgentState import AgentState
 from agent_lib.context.CxtComponent import CtxComponent
 from agent_lib.context.Props import NoProps, Props
 from agent_lib.store.Action import Action
@@ -43,6 +44,7 @@ class Store:
         self._subscribers = []
         self._bind_actions()
         self._bind_async_actions()
+        self.validate_agent_state()
 
     def _bind_actions(self) -> None:
         """Find all Action class attributes and bind them to this instance."""
@@ -198,6 +200,26 @@ class Store:
         if not names:
             return self._actions.copy()
         return {n: self._actions[n] for n in names if n in self._actions}
+
+    def validate_agent_state(self) -> None:
+        """Validate that agent_state dict keys match agent_name attributes."""
+        agent_state: dict[str, AgentState] | None = getattr(self, "agent_state", None)
+        if agent_state is None:
+            return
+
+        if not isinstance(agent_state, dict):
+            raise TypeError("agent_state must be a dict[str, AgentState]")
+
+        for key, state in agent_state.items():
+            if not isinstance(state, AgentState):
+                raise TypeError(
+                    f"agent_state['{key}'] must be an AgentState, "
+                    f"got {type(state).__name__}"
+                )
+            if key != state.agent_name:
+                raise ValueError(
+                    f"agent_state key '{key}' doesn't match agent_name '{state.agent_name}'"
+                )
 
     @overload
     def connect[P: Props](

@@ -15,6 +15,13 @@ When we are thinking about how to make a complex app with multiple agents, it mi
   agent-specific stores with the individual agenets and then assemble the peices together into the whole app. You need to be able to mix and
   match. Is this kind of design pattern something we can just do with out existing set up, or is something missing?
 
+
+FOR NEXT TIME:
+Let's sketch this idea in a new file under src/agent_lib/agent. Make an AgentState base clase. It should have attributes like active: bool,
+  should_act: bool, available_actions: dict(str, )
+
+
+
 #### State-Triggered Execution
 
 Agents are triggered by state changes, not direct calls. This enables:
