@@ -40,6 +40,7 @@ class Store:
         return Action(handler)
 
     def __init__(self) -> None:
+        """When calling this as __super__.init() in subclasses, ensure it is after class properties (actions, agent_state, etc) have been assigned."""
         self._actions = {}
         self._subscribers = []
         self._bind_actions()
