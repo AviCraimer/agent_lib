@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Coroutine, Callable
-from typing import Any, Self, overload
+from typing import Any, Self, cast, overload
 
-from deepdiff import DeepDiff, Delta
+from deepdiff import DeepDiff, Delta, parse_path
 
 from agent_lib.context.CxtComponent import CtxComponent
 from agent_lib.context.Props import NoProps, Props
@@ -20,7 +20,9 @@ class Store:
     def action[S: Store, PL](
         handler: Callable[[S, PL], frozenset[str]],
     ) -> Action[S, PL]:
-        """Decorator to define an action method on a Store subclass.
+        """Decorator to define a synchronous action method on a Store subclass. This facilitates defining sync action handlers as regular class methods in place when defining a store subclass. Of couse, the action class instances may also be defined separately added as store properties. This is useful if you have actions that are reused across different store classes.
+
+        Note: For async actions it is best to define them as AsyncAction instances separately and add them as store class properties.
         Usage:
             class MyStore(Store):
                 @Store.action
@@ -35,51 +37,6 @@ class Store:
             If you explicitly annotate `self` with a superclass type, the type checker will use that instead. This compiles but loses subclass type information. However, this is rarely an issue in practice since developers almost never explicitly annotate `self`.
         """
         return Action(handler)
-
-    @staticmethod
-    def async_action[S: Store, PL, R](
-        on_success: Callable[[S, R], frozenset[str]],
-        on_error: Callable[[S, Exception], frozenset[str]] | None = None,
-    ) -> Callable[[Callable[[S, PL], Coroutine[Any, Any, R]]], AsyncAction[S, PL, R]]:
-        """Decorator factory to define an async action on a Store subclass.
-
-        Usage:
-            class MyStore(Store):
-                @Store.async_action(
-                    on_success=lambda self, data: (
-                        setattr(self, "data", data) or frozenset({"data"})
-                    )
-                )
-                async def fetch_data(self, url: str) -> dict:
-                    async with aiohttp.get(url) as resp:
-                        return await resp.json()
-
-        How typing works:
-            The type parameter `S` is inferred from the `on_success` callback's
-            first parameter and/or the decorated method's `self` parameter.
-            When `self` is not explicitly annotated, it defaults to `Self`
-            (the enclosing class), so `S` correctly resolves to the Store
-            subclass.
-
-        Failure mode:
-            Same as `@Store.action` - explicitly annotating `self` with a
-            superclass type will lose subclass type information. This is
-            rarely an issue since developers almost never annotate `self`.
-
-        Args:
-            on_success: Handler called with async result to mutate state
-            on_error: Optional handler called with exception to mutate state
-
-        Returns:
-            Decorator that wraps async function into AsyncAction
-        """
-
-        def decorator(
-            handler: Callable[[S, PL], Coroutine[Any, Any, R]],
-        ) -> AsyncAction[S, PL, R]:
-            return AsyncAction(handler, on_success, on_error)
-
-        return decorator
 
     def __init__(self) -> None:
         self._actions = {}
@@ -126,9 +83,10 @@ class Store:
                 setattr(self, name, bound_action)
 
     async def _run_async_action(
-        self, async_action: AsyncAction[Self, Any, Any], payload: Any
+        self, async_action: AsyncAction[Any, Any, Any], payload: Any
     ) -> None:
         """Execute async action and process result through on_success/on_error.
+        Note: For type safety, the Store subclass should inherit from the protocols of any async actions it possesses as class properties.
 
         Args:
             async_action: The AsyncAction containing handler and hooks
@@ -148,9 +106,12 @@ class Store:
                 raise
 
     def _process_action(
-        self, handler: Callable[[Self, Any], frozenset[str]], payload: Any
+        self, handler: Callable[[Any, Any], frozenset[str]], payload: Any
     ) -> Delta:
         """Run action handler and return Delta representing all changes.
+
+        For type safety, the action must either take the Store subclass as its
+        first argument type, or use a protocol that is inherited by the store subclass.
 
         Args:
             handler: The action handler function (state, payload) -> scope
@@ -158,6 +119,11 @@ class Store:
 
         Returns:
             Delta object containing all changes, or empty Delta for no-op
+
+        Scope format:
+            Actions return a frozenset of dot-notation paths indicating which
+            parts of the store were modified, e.g., frozenset({'data.user_info'}).
+            Use '.' as a scope element to trigger a full diff of the entire store.
         """
         state_snapshot = snapshot(self)
         scope = handler(self, payload)
@@ -165,10 +131,44 @@ class Store:
         if not scope:  # no-op
             return Delta({})
 
-        # "." means full diff, otherwise restrict to specified paths
-        include = None if "." in scope else list(scope)
-        diff = DeepDiff(state_snapshot, self, include_paths=include)
+        # "." means full diff, otherwise filter to specified scope paths
+        if "." in scope:
+            diff = DeepDiff(state_snapshot, self)
+        else:
+            diff = DeepDiff(
+                state_snapshot,
+                self,
+                include_obj_callback=self._make_scope_filter(
+                    scope
+                ),  # This ensures DeepDiff only diffs the indicated scope.
+            )
         return Delta(diff)
+
+    @staticmethod
+    def _make_scope_filter(
+        scopes: frozenset[str],
+    ) -> Callable[[object, str], bool]:
+        """Create a DeepDiff include_obj_callback that filters to given scopes.
+
+        Args:
+            scopes: Set of dot-notation paths, e.g., {'data.user_info', 'config'}
+
+        Returns:
+            Callback function for DeepDiff's include_obj_callback parameter
+        """
+
+        def callback(_obj: object, path: str) -> bool:
+            # Normalize DeepDiff path (e.g., root.data['key']) to dot notation
+            normalized = ".".join(cast(list[str], parse_path(path)))
+            if not normalized:  # root - always traverse
+                return True
+            for scope in scopes:
+                # Include if path is within scope OR scope is within path (for traversal)
+                if normalized.startswith(scope) or scope.startswith(normalized):
+                    return True
+            return False
+
+        return callback
 
     def _notify_subscribers(self, delta: Delta) -> None:
         """Notify all subscribers of state changes.
