@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from agent_lib.agent.ToolMetadata import ToolMetadata
+
 
 @dataclass
 class AgentState:
@@ -35,8 +37,12 @@ class AgentState:
         should_act: Signal that the agent should take its next action.
             Typically set by orchestration logic or other agents via
             actions on the shared state.
+        history: Message history for this agent. Uses Sequence so developers can narrow with a TypedDict if needed.
+        tools: Tool metadata for tools granted to this agent. Used by system prompts to describe available tools.
     """
 
     agent_name: str
     active: bool = field(default=False)
     should_act: bool = field(default=False)
+    history: list[dict[str, str]] = field(default_factory=list)
+    tools: list[ToolMetadata] = field(default_factory=list)

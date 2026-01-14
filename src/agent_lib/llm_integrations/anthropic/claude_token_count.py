@@ -1,5 +1,6 @@
 import anthropic
-from disi_rag_chatbot.environment import anthropic_api_key
+from agent_lib.environment import anthropic_api_key
+
 
 _raw_client = anthropic.Anthropic(api_key=anthropic_api_key)
 

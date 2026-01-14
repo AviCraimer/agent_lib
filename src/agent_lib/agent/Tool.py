@@ -10,6 +10,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from agent_lib.agent.ToolMetadata import ToolMetadata
+
 
 @dataclass
 class Tool[P, R]:
@@ -37,3 +39,11 @@ class Tool[P, R]:
     def __call__(self, payload: P) -> R:
         """Invoke the tool with the given payload."""
         return self.handler(payload)
+
+    def to_metadata(self) -> ToolMetadata:
+        """Extract tool metadata (without handler) for storage in agent state."""
+        return ToolMetadata(
+            name=self.name,
+            description=self.description,
+            json_schema=self.json_schema,
+        )

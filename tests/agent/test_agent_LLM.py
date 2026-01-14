@@ -2,101 +2,228 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from agent_lib.agent.Agent import Agent
-from agent_lib.agent.Tool import Tool
+from agent_lib.agent.AgentState import AgentState
+from agent_lib.agent.ToolMetadata import ToolMetadata
+from agent_lib.context.components.LLMContext import LLMContext
+from agent_lib.context.CtxComponent import CtxComponent
+
+
+class MockLLMClient:
+    """Mock LLM client for testing."""
+
+    message_json_schema: str = "{}"
+
+    def __init__(self, response: str = '{"tool_calls": []}'):
+        self.response = response
+        self.last_context: LLMContext | None = None
+
+    def get_response(self, context: LLMContext) -> str:
+        self.last_context = context
+        return self.response
+
+
+def mock_context() -> LLMContext:
+    """Create a mock LLMContext for testing."""
+    return LLMContext(
+        system_prompt=CtxComponent.leaf(lambda: ""),
+        messages=CtxComponent.leaf(lambda: "[]"),
+    )
+
+
+def mock_state(tools: list[ToolMetadata] | None = None) -> AgentState:
+    """Create a mock AgentState for testing."""
+    state = AgentState(agent_name="agent")
+    if tools:
+        state.tools = tools
+    return state
+
+
+def make_get_state(state: AgentState):
+    """Create a mock get_state function."""
+    return lambda: state
 
 
 class TestAgentCreation:
     """Tests for Agent initialization."""
 
     def test_create_agent(self) -> None:
-        """Agent can be created with just a name."""
-        agent = Agent(name="planner")
+        """Agent can be created with name, llm_client, context, and get_state."""
+        mock_client = MockLLMClient()
+        state = mock_state()
+        agent = Agent(
+            name="planner",
+            llm_client=mock_client,
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
 
         assert agent.name == "planner"
-        assert agent.tools == {}
+        assert agent.llm_client is mock_client
 
 
-class TestToolManagement:
-    """Tests for granting and revoking tools."""
+class TestToolQueries:
+    """Tests for querying tools via get_state."""
 
-    def test_grant_tool(self) -> None:
-        """Granting a tool makes it available."""
-        agent = Agent(name="agent")
-        tool = Tool(name="greet", description="Greet someone", json_schema="{}", handler=lambda x: f"Hello, {x}")
-
-        agent.grant_tool(tool)
+    def test_has_tool_true(self) -> None:
+        """has_tool returns True when tool metadata is in state."""
+        state = mock_state([ToolMetadata("greet", "Greet someone", "{}")])
+        agent = Agent(
+            name="agent",
+            llm_client=MockLLMClient(),
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
 
         assert agent.has_tool("greet")
-        assert "greet" in agent.list_tools()
 
-    def test_revoke_tool(self) -> None:
-        """Revoking a tool removes it."""
-        agent = Agent(name="agent")
-        tool = Tool(name="greet", description="Greet someone", json_schema="{}", handler=lambda x: f"Hello, {x}")
-
-        agent.grant_tool(tool)
-        agent.revoke_tool("greet")
+    def test_has_tool_false(self) -> None:
+        """has_tool returns False when tool is not in state."""
+        state = mock_state()
+        agent = Agent(
+            name="agent",
+            llm_client=MockLLMClient(),
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
 
         assert not agent.has_tool("greet")
 
-    def test_revoke_nonexistent_tool_raises(self) -> None:
-        """Revoking a tool that isn't granted raises KeyError."""
-        agent = Agent(name="agent")
-
-        with pytest.raises(KeyError, match="not granted"):
-            agent.revoke_tool("nonexistent")
-
-
-class TestToolInvocation:
-    """Tests for invoking tools."""
-
-    def test_invoke_tool(self) -> None:
-        """Invoking a tool calls its handler with the payload."""
-        agent = Agent(name="agent")
-        tool = Tool(name="double", description="Double a number", json_schema="{}", handler=lambda x: x * 2)  # pyright: ignore[reportUnknownLambdaType, reportOperatorIssue]
-
-        agent.grant_tool(tool)
-        result = agent.invoke("double", 21)
-
-        assert result == 42
-
-    def test_invoke_nonexistent_tool_raises(self) -> None:
-        """Invoking a tool that isn't granted raises KeyError."""
-        agent = Agent(name="agent")
-
-        with pytest.raises(KeyError, match="not granted"):
-            agent.invoke("nonexistent", "payload")
-
-    def test_invoke_multiple_tools(self) -> None:
-        """Agent can have and invoke multiple tools."""
-        agent = Agent(name="agent")
-
-        agent.grant_tool(Tool("add", "Add two numbers", "{}", lambda x: x[0] + x[1]))
-        agent.grant_tool(Tool("multiply", "Multiply two numbers", "{}", lambda x: x[0] * x[1]))
-
-        assert agent.invoke("add", (2, 3)) == 5
-        assert agent.invoke("multiply", (2, 3)) == 6
-
-
-class TestListTools:
-    """Tests for listing tools."""
-
     def test_list_tools_empty(self) -> None:
-        """New agent has no tools."""
-        agent = Agent(name="agent")
+        """list_tools returns empty list when no tools in state."""
+        state = mock_state()
+        agent = Agent(
+            name="agent",
+            llm_client=MockLLMClient(),
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
 
         assert agent.list_tools() == []
 
-    def test_list_tools_after_grants(self) -> None:
-        """list_tools returns names of all granted tools."""
-        agent = Agent(name="agent")
-
-        agent.grant_tool(Tool("a", "Tool A", "{}", lambda x: x))
-        agent.grant_tool(Tool("b", "Tool B", "{}", lambda x: x))
-        agent.grant_tool(Tool("c", "Tool C", "{}", lambda x: x))
+    def test_list_tools_with_tools(self) -> None:
+        """list_tools returns names of tools in state."""
+        state = mock_state([
+            ToolMetadata("a", "Tool A", "{}"),
+            ToolMetadata("b", "Tool B", "{}"),
+            ToolMetadata("c", "Tool C", "{}"),
+        ])
+        agent = Agent(
+            name="agent",
+            llm_client=MockLLMClient(),
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
 
         tools = agent.list_tools()
         assert set(tools) == {"a", "b", "c"}
+
+
+class TestStep:
+    """Tests for the step() method."""
+
+    def test_step_calls_llm_client(self) -> None:
+        """step() calls the LLM client with the agent's context."""
+        mock_client = MockLLMClient('{"tool_calls": []}')
+        context = mock_context()
+        state = mock_state()
+        agent = Agent(
+            name="agent",
+            llm_client=mock_client,
+            context=context,
+            get_state=make_get_state(state),
+        )
+
+        agent.step()
+
+        assert mock_client.last_context is context
+
+    def test_step_returns_tool_calls(self) -> None:
+        """step() returns the validated tool calls from LLM response."""
+        state = mock_state([ToolMetadata("record", "Record a value", "{}")])
+        mock_client = MockLLMClient(
+            '{"tool_calls": [{"tool_name": "record", "payload": {"value": "hello"}}]}'
+        )
+        agent = Agent(
+            name="agent",
+            llm_client=mock_client,
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
+
+        tool_calls = agent.step()
+
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["tool_name"] == "record"
+        assert tool_calls[0]["payload"] == {"value": "hello"}
+
+    def test_step_returns_empty_list_for_no_tools(self) -> None:
+        """step() returns empty list when LLM returns no tool calls."""
+        state = mock_state()
+        mock_client = MockLLMClient('{"tool_calls": []}')
+        agent = Agent(
+            name="agent",
+            llm_client=mock_client,
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
+
+        tool_calls = agent.step()
+
+        assert tool_calls == []
+
+    def test_step_raises_on_invalid_json(self) -> None:
+        """step() raises on invalid JSON response."""
+        state = mock_state()
+        mock_client = MockLLMClient("not json")
+        agent = Agent(
+            name="agent",
+            llm_client=mock_client,
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
+
+        with pytest.raises(json.JSONDecodeError):
+            agent.step()
+
+    def test_step_raises_on_unknown_tool(self) -> None:
+        """step() raises KeyError when tool is not in state."""
+        state = mock_state()  # No tools
+        mock_client = MockLLMClient(
+            '{"tool_calls": [{"tool_name": "unknown", "payload": {}}]}'
+        )
+        agent = Agent(
+            name="agent",
+            llm_client=mock_client,
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
+
+        with pytest.raises(KeyError, match="not granted"):
+            agent.step()
+
+    def test_step_returns_multiple_tool_calls(self) -> None:
+        """step() returns all tool calls from LLM response."""
+        state = mock_state([
+            ToolMetadata("tool_a", "Tool A", "{}"),
+            ToolMetadata("tool_b", "Tool B", "{}"),
+        ])
+        mock_client = MockLLMClient(
+            '{"tool_calls": [{"tool_name": "tool_a", "payload": {"x": 1}}, {"tool_name": "tool_b", "payload": {"y": 2}}]}'
+        )
+        agent = Agent(
+            name="agent",
+            llm_client=mock_client,
+            context=mock_context(),
+            get_state=make_get_state(state),
+        )
+
+        tool_calls = agent.step()
+
+        assert len(tool_calls) == 2
+        assert tool_calls[0]["tool_name"] == "tool_a"
+        assert tool_calls[1]["tool_name"] == "tool_b"

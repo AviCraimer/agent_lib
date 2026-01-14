@@ -8,6 +8,7 @@ dependencies = [
   "deepdiff>=8.0",
   "anthropic>=0.40",
   "python-dotenv>=1.0",
+  "jsonschema>=4.0",
 ]
 description = "A Python project"
 license = {text = "MIT"}

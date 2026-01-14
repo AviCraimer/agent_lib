@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import Any, Self, cast, overload
+from typing import Any, Self, TypedDict, overload
 
 from deepdiff import DeepDiff, Delta, parse_path
 
@@ -14,6 +14,13 @@ from agent_lib.store.Fanouts import Fanouts
 from agent_lib.store.snapshot import snapshot
 from agent_lib.store.State import State
 from agent_lib.store.Subscribers import Subscribers
+
+
+class UpdateShouldActPayload(TypedDict):
+    """Payload for the update_should_act action."""
+
+    agent_name: str
+    should_act: bool
 
 
 class Store:
@@ -174,7 +181,8 @@ class Store:
 
         def callback(_obj: object, path: str) -> bool:
             # Normalize DeepDiff path (e.g., root.data['key']) to dot notation
-            normalized = ".".join(cast(list[str], parse_path(path)))
+            # parse_path returns strings for keys and ints for list indices
+            normalized = ".".join(str(p) for p in parse_path(path))
             if not normalized:  # root - always traverse
                 return True
             for scope in scopes:
@@ -248,3 +256,22 @@ class Store:
             self._subscribers.notify(delta)
 
         return bound
+
+    @action
+    def update_should_act(
+        self, payload: UpdateShouldActPayload
+    ) -> frozenset[str]:
+        """Update an agent's should_act flag.
+
+        This is a core action used by AgentRuntime to control agent execution.
+        Agents can use this (via a tool) to signal completion or to activate other agents.
+
+        Args:
+            payload: Contains agent_name and should_act boolean
+
+        Returns:
+            Scope indicating agent_state was modified
+        """
+        agent_name = payload["agent_name"]
+        self._state.agent_state[agent_name].should_act = payload["should_act"]
+        return frozenset({"_state.agent_state"})
