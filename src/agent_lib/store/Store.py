@@ -5,7 +5,7 @@ from typing import Any, Self, cast, overload
 
 from deepdiff import DeepDiff, Delta, parse_path
 
-from agent_lib.context.CxtComponent import CtxComponent
+from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps, Props
 from agent_lib.store.Action import Action
 from agent_lib.store.Agents import Agents

@@ -30,7 +30,7 @@ class TestAgentCreation:
         assert isinstance(agent, Agent)
         assert agent.name == "planner"
         assert "planner" in store._state.agent_state
-        assert store._state.agent_state["planner"] is agent.state
+        assert runtime.get_agent_state("planner") is store._state.agent_state["planner"]
 
     def test_create_agent_with_custom_state_class(self) -> None:
         """Can create agent with custom AgentState subclass."""
@@ -42,10 +42,11 @@ class TestAgentCreation:
         store = Store()
         runtime = AgentRuntime(store)
 
-        agent = runtime.create_agent("planner", state_class=PlannerState)
+        runtime.create_agent("planner", state_class=PlannerState)
+        state = runtime.get_agent_state("planner")
 
-        assert isinstance(agent.state, PlannerState)
-        assert agent.state.plan == []
+        assert isinstance(state, PlannerState)
+        assert state.plan == []
 
     def test_create_duplicate_agent_raises(self) -> None:
         """Creating agent with existing name raises ValueError."""

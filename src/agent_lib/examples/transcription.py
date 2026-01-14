@@ -1,4 +1,4 @@
-from agent_lib.context.CxtComponent import (
+from agent_lib.context.CtxComponent import (
     CtxComponent,
     Tag,
     TagProps,

@@ -5,28 +5,18 @@ from __future__ import annotations
 import pytest
 
 from agent_lib.agent.Agent import Agent
-from agent_lib.agent.AgentState import AgentState
 from agent_lib.agent.Tool import Tool
 
 
 class TestAgentCreation:
     """Tests for Agent initialization."""
 
-    def test_create_agent_with_matching_name(self) -> None:
-        """Agent can be created when name matches state.agent_name."""
-        state = AgentState(agent_name="planner")
-        agent = Agent(name="planner", state=state)
+    def test_create_agent(self) -> None:
+        """Agent can be created with just a name."""
+        agent = Agent(name="planner")
 
         assert agent.name == "planner"
-        assert agent.state is state
         assert agent.tools == {}
-
-    def test_create_agent_with_mismatched_name_raises(self) -> None:
-        """Creating agent with mismatched name raises ValueError."""
-        state = AgentState(agent_name="planner")
-
-        with pytest.raises(ValueError, match="doesn't match"):
-            Agent(name="executor", state=state)
 
 
 class TestToolManagement:
@@ -34,8 +24,7 @@ class TestToolManagement:
 
     def test_grant_tool(self) -> None:
         """Granting a tool makes it available."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
         tool = Tool(name="greet", description="Greet someone", json_schema="{}", handler=lambda x: f"Hello, {x}")
 
         agent.grant_tool(tool)
@@ -45,8 +34,7 @@ class TestToolManagement:
 
     def test_revoke_tool(self) -> None:
         """Revoking a tool removes it."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
         tool = Tool(name="greet", description="Greet someone", json_schema="{}", handler=lambda x: f"Hello, {x}")
 
         agent.grant_tool(tool)
@@ -56,8 +44,7 @@ class TestToolManagement:
 
     def test_revoke_nonexistent_tool_raises(self) -> None:
         """Revoking a tool that isn't granted raises KeyError."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
 
         with pytest.raises(KeyError, match="not granted"):
             agent.revoke_tool("nonexistent")
@@ -68,8 +55,7 @@ class TestToolInvocation:
 
     def test_invoke_tool(self) -> None:
         """Invoking a tool calls its handler with the payload."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
         tool = Tool(name="double", description="Double a number", json_schema="{}", handler=lambda x: x * 2)
 
         agent.grant_tool(tool)
@@ -79,16 +65,14 @@ class TestToolInvocation:
 
     def test_invoke_nonexistent_tool_raises(self) -> None:
         """Invoking a tool that isn't granted raises KeyError."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
 
         with pytest.raises(KeyError, match="not granted"):
             agent.invoke("nonexistent", "payload")
 
     def test_invoke_multiple_tools(self) -> None:
         """Agent can have and invoke multiple tools."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
 
         agent.grant_tool(Tool("add", "Add two numbers", "{}", lambda x: x[0] + x[1]))
         agent.grant_tool(Tool("multiply", "Multiply two numbers", "{}", lambda x: x[0] * x[1]))
@@ -102,15 +86,13 @@ class TestListTools:
 
     def test_list_tools_empty(self) -> None:
         """New agent has no tools."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
 
         assert agent.list_tools() == []
 
     def test_list_tools_after_grants(self) -> None:
         """list_tools returns names of all granted tools."""
-        state = AgentState(agent_name="agent")
-        agent = Agent(name="agent", state=state)
+        agent = Agent(name="agent")
 
         agent.grant_tool(Tool("a", "Tool A", "{}", lambda x: x))
         agent.grant_tool(Tool("b", "Tool B", "{}", lambda x: x))

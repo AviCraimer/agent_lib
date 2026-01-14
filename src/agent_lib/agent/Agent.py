@@ -1,44 +1,38 @@
 """Agent - runtime agent with granted tools.
 
 Agent instances live outside the Store (in AgentRuntime) to maintain security boundaries.
-Agents hold a reference to their AgentState (which lives in Store._state.agent_state)
-but the Store cannot access Agent instances.
+Agent state lives in Store._state.agent_state and is accessed through AgentRuntime,
+not through the Agent itself. This keeps the Store as the single source of truth.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from agent_lib.agent.AgentState import AgentState
 from agent_lib.agent.Tool import Tool
 
 
 class Agent:
     """Runtime agent with granted tools.
 
-    Agents are the behavioral component - they hold tools (capabilities) and can invoke them.
-    The agent's state data lives in the Store, but the Agent instance itself is managed
-    by AgentRuntime, which is separate from the Store.
+    Agents are purely behavioral - they hold tools (capabilities) and can invoke them.
+    Agent state lives in the Store and is accessed through AgentRuntime, not through
+    the Agent itself. This maintains a clear separation: Agent = behavior, Store = state.
 
     This separation ensures that actions (which receive the Store) cannot access
     Agent instances directly, providing a security boundary.
     """
 
     name: str
-    state: AgentState
     tools: dict[str, Tool[Any, Any]]
 
-    def __init__(self, name: str, state: AgentState) -> None:
-        """Create an agent with a reference to its state.
+    def __init__(self, name: str) -> None:
+        """Create an agent.
 
         Args:
-            name: Unique identifier for this agent (should match state.agent_name)
-            state: Reference to AgentState in Store._state.agent_state
+            name: Unique identifier for this agent
         """
-        if name != state.agent_name:
-            raise ValueError(f"Agent name '{name}' doesn't match state.agent_name '{state.agent_name}'")
         self.name = name
-        self.state = state
         self.tools = {}
 
     def grant_tool(self, tool: Tool[Any, Any]) -> None:

@@ -27,12 +27,18 @@ class AgentRuntime:
     and agent behavior (Agent instances held here). Actions receive the Store but cannot
     access AgentRuntime or Agent instances.
 
+    Agent state is accessed through the runtime, not through Agent instances directly.
+    This keeps the Store as the single source of truth for all state.
+
     Usage:
         store = MyStore()
         runtime = AgentRuntime(store)
 
         # Create an agent - adds state to Store and creates Agent instance
         planner = runtime.create_agent("planner")
+
+        # Access agent state through the runtime
+        state = runtime.get_agent_state("planner")
 
         # Grant tools to the agent
         planner.grant_tool(some_tool)
@@ -81,7 +87,7 @@ class AgentRuntime:
         self._store._state.agent_state[name] = state
 
         # Create Agent instance (held here, not in Store)
-        agent = Agent(name=name, state=state)
+        agent = Agent(name=name)
         self._agents[name] = agent
 
         return agent
@@ -89,6 +95,10 @@ class AgentRuntime:
     def get_agent(self, name: str) -> Agent | None:
         """Get an agent by name, or None if not found."""
         return self._agents.get(name)
+
+    def get_agent_state(self, name: str) -> AgentState | None:
+        """Get an agent's state from the Store, or None if not found."""
+        return self._store._state.agent_state.get(name)
 
     def remove_agent(self, name: str) -> None:
         """Remove an agent, deleting its state from the Store.

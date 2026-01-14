@@ -1,6 +1,6 @@
 import enum
 from typing import Literal
-from agent_lib.context.CxtComponent import CtxComponent
+from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
 from agent_lib.llm_integrations.anthropic.claude_client import ChatMessage
 
