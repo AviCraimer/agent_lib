@@ -1,29 +1,38 @@
 from __future__ import annotations
 
-from collections.abc import Coroutine, Callable
+from collections.abc import Callable, Coroutine
 from typing import Any, Self, cast, overload
 
 from deepdiff import DeepDiff, Delta, parse_path
 
-from agent_lib.agent.AgentState import AgentState
 from agent_lib.context.CxtComponent import CtxComponent
 from agent_lib.context.Props import NoProps, Props
 from agent_lib.store.Action import Action
+from agent_lib.store.Agents import Agents
 from agent_lib.store.AsyncAction import AsyncAction
+from agent_lib.store.Fanouts import Fanouts
 from agent_lib.store.snapshot import snapshot
+from agent_lib.store.State import State
+from agent_lib.store.Subscribers import Subscribers
 
 
 class Store:
     _actions: dict[str, Callable[..., None]]
-    _subscribers: list[Callable[[Delta], None]]
+    _subscribers: Subscribers
+    _fanouts: Fanouts
+    _agents: Agents
+    _state: State
 
     @staticmethod
     def action[S: Store, PL](
         handler: Callable[[S, PL], frozenset[str]],
     ) -> Action[S, PL]:
-        """Decorator to define a synchronous action method on a Store subclass. This facilitates defining sync action handlers as regular class methods in place when defining a store subclass. Of couse, the action class instances may also be defined separately added as store properties. This is useful if you have actions that are reused across different store classes.
+        """Decorator to define a synchronous action method on a Store subclass.
+
+        This facilitates defining sync action handlers as regular class methods in place when defining a store subclass. Of course, the action class instances may also be defined separately and added as store properties. This is useful if you have actions that are reused across different store classes.
 
         Note: For async actions it is best to define them as AsyncAction instances separately and add them as store class properties.
+
         Usage:
             class MyStore(Store):
                 @Store.action
@@ -40,12 +49,19 @@ class Store:
         return Action(handler)
 
     def __init__(self) -> None:
-        """When calling this as __super__.init() in subclasses, ensure it is after class properties (actions, agent_state, etc) have been assigned."""
+        """Initialize the store with composed components.
+
+        When calling this as super().__init__() in subclasses, ensure it is after class properties (actions, _state, etc) have been assigned.
+        """
         self._actions = {}
-        self._subscribers = []
+        if not hasattr(self, "_state"):
+            self._state = State()
+        self._subscribers = Subscribers(self)
+        self._agents = Agents(self)
+        self._agents.validate()
+        self._fanouts = Fanouts(self)
         self._bind_actions()
         self._bind_async_actions()
-        self.validate_agent_state()
 
     def _bind_actions(self) -> None:
         """Find all Action class attributes and bind them to this instance."""
@@ -58,7 +74,7 @@ class Store:
                 def make_bound(action: Action[Self, Any]) -> Callable[..., None]:
                     def bound(payload: Any) -> None:
                         delta = self._process_action(action.handler, payload)
-                        self._notify_subscribers(delta)
+                        self._subscribers.notify(delta)
 
                     return bound
 
@@ -89,6 +105,7 @@ class Store:
         self, async_action: AsyncAction[Any, Any, Any], payload: Any
     ) -> None:
         """Execute async action and process result through on_success/on_error.
+
         Note: For type safety, the Store subclass should inherit from the protocols of any async actions it possesses as class properties.
 
         Args:
@@ -98,13 +115,13 @@ class Store:
         try:
             # Async work (read-only, no snapshot taken here)
             result = await async_action.handler(self, payload)
-            # Sync mutation with full snapshot → mutate → diff → notify flow
+            # Sync mutation with full snapshot -> mutate -> diff -> notify flow
             delta = self._process_action(async_action.on_success, result)
-            self._notify_subscribers(delta)
+            self._subscribers.notify(delta)
         except Exception as e:
             if async_action.on_error:
                 delta = self._process_action(async_action.on_error, e)
-                self._notify_subscribers(delta)
+                self._subscribers.notify(delta)
             else:
                 raise
 
@@ -113,8 +130,7 @@ class Store:
     ) -> Delta:
         """Run action handler and return Delta representing all changes.
 
-        For type safety, the action must either take the Store subclass as its
-        first argument type, or use a protocol that is inherited by the store subclass.
+        For type safety, the action must either take the Store subclass as its first argument type, or use a protocol that is inherited by the store subclass.
 
         Args:
             handler: The action handler function (state, payload) -> scope
@@ -124,9 +140,7 @@ class Store:
             Delta object containing all changes, or empty Delta for no-op
 
         Scope format:
-            Actions return a frozenset of dot-notation paths indicating which
-            parts of the store were modified, e.g., frozenset({'data.user_info'}).
-            Use '.' as a scope element to trigger a full diff of the entire store.
+            Actions return a frozenset of dot-notation paths indicating which parts of the store were modified, e.g., frozenset({'data.user_info'}). Use '.' as a scope element to trigger a full diff of the entire store.
         """
         state_snapshot = snapshot(self)
         scope = handler(self, payload)
@@ -141,9 +155,7 @@ class Store:
             diff = DeepDiff(
                 state_snapshot,
                 self,
-                include_obj_callback=self._make_scope_filter(
-                    scope
-                ),  # This ensures DeepDiff only diffs the indicated scope.
+                include_obj_callback=self._make_scope_filter(scope),
             )
         return Delta(diff)
 
@@ -173,17 +185,6 @@ class Store:
 
         return callback
 
-    def _notify_subscribers(self, delta: Delta) -> None:
-        """Notify all subscribers of state changes.
-
-        Args:
-            delta: The Delta object containing all changes from the action
-        """
-        if not delta.diff:  # empty = no changes
-            return
-        for subscriber in self._subscribers:
-            subscriber(delta)
-
     def subscribe(self, callback: Callable[[Delta], None]) -> Callable[[], None]:
         """Subscribe to state changes.
 
@@ -201,26 +202,6 @@ class Store:
         if not names:
             return self._actions.copy()
         return {n: self._actions[n] for n in names if n in self._actions}
-
-    def validate_agent_state(self) -> None:
-        """Validate that agent_state dict keys match agent_name attributes."""
-        agent_state: dict[str, AgentState] | None = getattr(self, "agent_state", None)
-        if agent_state is None:
-            return
-
-        if not isinstance(agent_state, dict):
-            raise TypeError("agent_state must be a dict[str, AgentState]")
-
-        for key, state in agent_state.items():
-            if not isinstance(state, AgentState):
-                raise TypeError(
-                    f"agent_state['{key}'] must be an AgentState, "
-                    f"got {type(state).__name__}"
-                )
-            if key != state.agent_name:
-                raise ValueError(
-                    f"agent_state key '{key}' doesn't match agent_name '{state.agent_name}'"
-                )
 
     @overload
     def connect[P: Props](
@@ -264,6 +245,6 @@ class Store:
     ) -> Callable[[T], None]:
         def bound(payload: T) -> None:
             delta = self._process_action(action.handler, payload)
-            self._notify_subscribers(delta)
+            self._subscribers.notify(delta)
 
         return bound

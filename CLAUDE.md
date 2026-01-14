@@ -22,6 +22,7 @@ This project uses **implicit namespace packages** (PEP 420). Do NOT add `__init_
 - Use `pyright` for type checking in strict mode (run `make types`)
 - All functions must have type annotations
 - Line length: 100 characters
+- **Docstrings are exempt from line length limits.** Keep sentences intact - do not break lines mid-sentence. Break only at sentence boundaries if needed.
 
 ## Development Commands
 

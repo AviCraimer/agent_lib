@@ -1,4 +1,7 @@
-"""Tests for Store.validate_agent_state() method."""
+"""Tests for Store agent state validation via Agents.validate()."""
+
+# pyright: reportPrivateUsage=false
+# Tests need access to Store internals (_state) to verify behavior.
 
 from __future__ import annotations
 
@@ -7,6 +10,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from agent_lib.agent.AgentState import AgentState
+from agent_lib.store.State import State
 from agent_lib.store.Store import Store
 
 
@@ -31,45 +35,46 @@ class TestValidateAgentStateSuccess:
         """Single agent with matching key and agent_name passes."""
 
         class AppStore(Store):
-            agent_state: dict[str, AgentState]
-
             def __init__(self) -> None:
-                self.agent_state = {
-                    "planner": PlannerState(agent_name="planner"),
-                }
+                self._state = State(
+                    agent_state={
+                        "planner": PlannerState(agent_name="planner"),
+                    }
+                )
                 super().__init__()
 
         store = AppStore()
-        assert store.agent_state["planner"].agent_name == "planner"
+        assert store._state.agent_state["planner"].agent_name == "planner"
 
     def test_valid_multiple_agents(self) -> None:
         """Multiple agents with matching keys and agent_names pass."""
 
         class AppStore(Store):
-            agent_state: dict[str, AgentState]
-
             def __init__(self) -> None:
-                self.agent_state = {
-                    "planner": PlannerState(agent_name="planner"),
-                    "executor": ExecutorState(agent_name="executor"),
-                }
+                self._state = State(
+                    agent_state={
+                        "planner": PlannerState(agent_name="planner"),
+                        "executor": ExecutorState(agent_name="executor"),
+                    }
+                )
                 super().__init__()
 
         store = AppStore()
-        assert len(store.agent_state) == 2
+        assert len(store._state.agent_state) == 2
 
-    def test_no_agent_state_attribute(self) -> None:
-        """Store without agent_state attribute passes (no-op)."""
+    def test_no_agent_state(self) -> None:
+        """Store with empty agent_state passes (no-op)."""
 
         class SimpleStore(Store):
             value: int
 
             def __init__(self) -> None:
                 self.value = 0
-                super().__init__()  # Should not raise
+                super().__init__()
 
         store = SimpleStore()
         assert store.value == 0
+        assert store._state.agent_state == {}
 
 
 class TestValidateAgentStateMismatch:
@@ -79,12 +84,12 @@ class TestValidateAgentStateMismatch:
         """Mismatched key and agent_name raises ValueError."""
 
         class AppStore(Store):
-            agent_state: dict[str, AgentState]
-
             def __init__(self) -> None:
-                self.agent_state = {
-                    "wrong_key": PlannerState(agent_name="planner"),
-                }
+                self._state = State(
+                    agent_state={
+                        "wrong_key": PlannerState(agent_name="planner"),
+                    }
+                )
                 super().__init__()
 
         with pytest.raises(ValueError, match="wrong_key.*planner"):
@@ -94,13 +99,13 @@ class TestValidateAgentStateMismatch:
         """One mismatched agent among valid ones raises ValueError."""
 
         class AppStore(Store):
-            agent_state: dict[str, AgentState]
-
             def __init__(self) -> None:
-                self.agent_state = {
-                    "planner": PlannerState(agent_name="planner"),
-                    "wrong": ExecutorState(agent_name="executor"),
-                }
+                self._state = State(
+                    agent_state={
+                        "planner": PlannerState(agent_name="planner"),
+                        "wrong": ExecutorState(agent_name="executor"),
+                    }
+                )
                 super().__init__()
 
         with pytest.raises(ValueError, match="wrong.*executor"):
@@ -114,12 +119,12 @@ class TestValidateAgentStateTypeErrors:
         """Value that is not AgentState raises TypeError."""
 
         class AppStore(Store):
-            agent_state: dict[str, AgentState]
-
             def __init__(self) -> None:
-                self.agent_state = {
-                    "planner": {"not": "an agent"},  # type: ignore[dict-item]
-                }
+                self._state = State(
+                    agent_state={
+                        "planner": {"not": "an agent"},  # type: ignore[dict-item]
+                    }
+                )
                 super().__init__()
 
         with pytest.raises(TypeError, match="must be an AgentState"):
@@ -129,10 +134,9 @@ class TestValidateAgentStateTypeErrors:
         """agent_state that is not a dict raises TypeError."""
 
         class AppStore(Store):
-            agent_state: list[AgentState]  # type: ignore[assignment]
-
             def __init__(self) -> None:
-                self.agent_state = [PlannerState(agent_name="planner")]  # type: ignore[assignment]
+                self._state = State()
+                self._state.agent_state = [PlannerState(agent_name="planner")]  # type: ignore[assignment]
                 super().__init__()
 
         with pytest.raises(TypeError, match="must be a dict"):
