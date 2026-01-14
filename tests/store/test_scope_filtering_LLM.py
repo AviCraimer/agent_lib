@@ -9,9 +9,8 @@ Tests the frozenset scope return values:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
-
-from deepdiff import Delta
 
 from agent_lib.store.Action import Action
 from agent_lib.store.Store import Store
@@ -35,12 +34,17 @@ class TestNoOpScope:
                 return frozenset()  # no_op
 
         store = NoOpStore()
-        notifications: list[Delta] = []
-        store.subscribe(lambda d: notifications.append(d))
+        notification_count = 0
+
+        def on_change(_: Callable[[str], bool]) -> None:
+            nonlocal notification_count
+            notification_count += 1
+
+        store.subscribe(on_change)
 
         store.no_change(None)
 
-        assert len(notifications) == 0
+        assert notification_count == 0
 
     def test_no_op_when_value_unchanged(self) -> None:
         """Returning no_op when value didn't actually change."""
@@ -60,16 +64,21 @@ class TestNoOpScope:
                 return frozenset({"name"})
 
         store = ConditionalStore()
-        notifications: list[Delta] = []
-        store.subscribe(lambda d: notifications.append(d))
+        notification_count = 0
+
+        def on_change(_: Callable[[str], bool]) -> None:
+            nonlocal notification_count
+            notification_count += 1
+
+        store.subscribe(on_change)
 
         # Same value - should not notify
         store.set_name("Alice")
-        assert len(notifications) == 0
+        assert notification_count == 0
 
         # Different value - should notify
         store.set_name("Bob")
-        assert len(notifications) == 1
+        assert notification_count == 1
 
 
 class TestFullDiffScope:
@@ -97,20 +106,21 @@ class TestFullDiffScope:
                 return frozenset({"."})  # full diff
 
         store = FullDiffStore()
-        notifications: list[Delta] = []
-        store.subscribe(lambda d: notifications.append(d))
+        affected_checks: list[tuple[bool, bool, bool]] = []
+
+        def on_change(affects: Callable[[str], bool]) -> None:
+            affected_checks.append((affects("name"), affects("count"), affects("active")))
+
+        store.subscribe(on_change)
 
         store.update_all("updated")
 
         assert store.name == "updated"
         assert store.count == 999
         assert store.active is True
-        assert len(notifications) == 1
-
+        assert len(affected_checks) == 1
         # Full diff should capture all three changes
-        diff_str = str(notifications[0].diff)
-        assert "updated" in diff_str
-        assert "999" in diff_str
+        assert affected_checks[0] == (True, True, True)
 
 
 class TestMultipleScopePaths:
@@ -144,19 +154,22 @@ class TestMultipleScopePaths:
             update_both = update_action
 
         store = TestStore()
-        notifications: list[Delta] = []
-        store.subscribe(lambda d: notifications.append(d))
+        affected_checks: list[tuple[bool, bool, bool]] = []
+
+        def on_change(affects: Callable[[str], bool]) -> None:
+            affected_checks.append(
+                (affects("data.user"), affects("config.theme"), affects("heavy"))
+            )
+
+        store.subscribe(on_change)
 
         store.update_both(("alice", "dark"))
 
         assert store.data["user"] == "alice"
         assert store.config["theme"] == "dark"
-        assert len(notifications) == 1
-
-        # Verify both changes captured
-        diff_str = str(notifications[0].diff)
-        assert "alice" in diff_str
-        assert "dark" in diff_str
+        assert len(affected_checks) == 1
+        # Both paths affected, heavy not affected
+        assert affected_checks[0] == (True, True, False)
 
     def test_nested_scope_paths(self) -> None:
         """Nested dot-notation paths work correctly."""
@@ -176,12 +189,18 @@ class TestMultipleScopePaths:
                 return frozenset({"users.alice.name"})
 
         store = NestedStore()
-        notifications: list[Delta] = []
-        store.subscribe(lambda d: notifications.append(d))
+        affected_checks: list[tuple[bool, bool, bool]] = []
+
+        def on_change(affects: Callable[[str], bool]) -> None:
+            affected_checks.append(
+                (affects("users.alice.name"), affects("users.alice.age"), affects("settings"))
+            )
+
+        store.subscribe(on_change)
 
         store.update_user_name("Alicia")
 
         assert store.users["alice"]["name"] == "Alicia"
-        assert len(notifications) == 1
-        diff_str = str(notifications[0].diff)
-        assert "Alicia" in diff_str
+        assert len(affected_checks) == 1
+        # Only name affected, not age or settings
+        assert affected_checks[0] == (True, False, False)

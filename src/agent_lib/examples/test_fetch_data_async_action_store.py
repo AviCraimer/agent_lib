@@ -4,9 +4,10 @@ from __future__ import annotations
 
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
-from deepdiff import Delta
+
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.Store import Store
 
@@ -146,8 +147,8 @@ async def test_fetch_success() -> None:
     store = ApiDataStore(api_key="secret-key-123")
 
     # Track notifications
-    notifications: list[Delta] = []
-    store.subscribe(lambda delta: notifications.append(delta))
+    affected_paths: list[bool] = []
+    store.subscribe(lambda affects: affected_paths.append(affects("data.user_info")))
 
     # Dispatch the async action
     payload = FetchPayload(api_endpoint="success.com", data_result_key="user_info")
@@ -159,8 +160,8 @@ async def test_fetch_success() -> None:
     assert store.data["user_info"]["api_key_used"] == "secret-key-123"
 
     # Verify we got a notification
-    assert len(notifications) == 1, "Should have received one notification"
-    print(f"  Notification diff: {notifications[0].diff}")
+    assert len(affected_paths) == 1, "Should have received one notification"
+    print(f"  data.user_info affected: {affected_paths[0]}")
 
     print(f"  Store data: {store.data}")
     print("  ✓ Test passed!")
@@ -173,8 +174,8 @@ async def test_fetch_failure() -> None:
     store = ApiDataStore(api_key="secret-key-456")
 
     # Track notifications
-    notifications: list[Delta] = []
-    store.subscribe(lambda delta: notifications.append(delta))
+    affected_paths: list[bool] = []
+    store.subscribe(lambda affects: affected_paths.append(affects("data.weather")))
 
     # Dispatch the async action with a failing endpoint
     payload = FetchPayload(api_endpoint="fail.com", data_result_key="weather")
@@ -186,8 +187,8 @@ async def test_fetch_failure() -> None:
     assert "Failed to fetch" in store.data["weather"]["message"]
 
     # Verify we got a notification
-    assert len(notifications) == 1, "Should have received one notification"
-    print(f"  Notification diff: {notifications[0].diff}")
+    assert len(affected_paths) == 1, "Should have received one notification"
+    print(f"  data.weather affected: {affected_paths[0]}")
 
     print(f"  Store data: {store.data}")
     print("  ✓ Test passed!")
@@ -201,10 +202,10 @@ async def test_multiple_fetches() -> None:
 
     notification_count = 0
 
-    def on_change(delta: Delta) -> None:
+    def on_change(affects: Callable[[str], bool]) -> None:
         nonlocal notification_count
         notification_count += 1
-        print(f"    Notification #{notification_count}: {delta.diff}")
+        print(f"    Notification #{notification_count}: data affected = {affects('data')}")
 
     store.subscribe(on_change)
 
@@ -241,7 +242,7 @@ async def test_unsubscribe() -> None:
 
     notification_count = 0
 
-    def on_change(_: Delta) -> None:
+    def on_change(_: Callable[[str], bool]) -> None:
         nonlocal notification_count
         notification_count += 1
 

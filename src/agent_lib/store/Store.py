@@ -13,7 +13,7 @@ from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.Fanouts import Fanouts
 from agent_lib.store.snapshot import snapshot
 from agent_lib.store.State import State
-from agent_lib.store.Subscribers import Subscribers
+from agent_lib.store.Subscribers import SubscriberCallback, Subscribers
 
 
 class UpdateShouldActPayload(TypedDict):
@@ -23,12 +23,12 @@ class UpdateShouldActPayload(TypedDict):
     should_act: bool
 
 
-class Store:
+class Store[StateT: State = State]:
     _actions: dict[str, Callable[..., None]]
     _subscribers: Subscribers
     _fanouts: Fanouts
     _agents: Agents
-    _state: State
+    _state: StateT
 
     @staticmethod
     def action[S: Store, PL](
@@ -62,7 +62,7 @@ class Store:
         """
         self._actions = {}
         if not hasattr(self, "_state"):
-            self._state = State()
+            self._state = State()  # type: ignore[assignment]
         self._subscribers = Subscribers(self)
         self._agents = Agents(self)
         self._agents.validate()
@@ -193,14 +193,22 @@ class Store:
 
         return callback
 
-    def subscribe(self, callback: Callable[[Delta], None]) -> Callable[[], None]:
+    def subscribe(self, callback: SubscriberCallback) -> Callable[[], None]:
         """Subscribe to state changes.
 
         Args:
-            callback: Function to call with Delta when state changes
+            callback: Function that receives an `affects(path) -> bool` helper
+                to check if specific paths were changed
 
         Returns:
             Unsubscribe function - call it to remove the subscription
+
+        Example:
+            def on_change(affects):
+                if affects("_state.current_text"):
+                    print("Text changed!")
+
+            unsubscribe = store.subscribe(on_change)
         """
         self._subscribers.append(callback)
         return lambda: self._subscribers.remove(callback)

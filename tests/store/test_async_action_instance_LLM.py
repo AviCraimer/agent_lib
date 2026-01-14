@@ -7,11 +7,11 @@ them as class attributes to Store subclasses, using Protocols for type safety.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 import pytest
-from deepdiff import Delta
 
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.Store import Store
@@ -157,16 +157,16 @@ class TestAsyncActionInstanceSuccess:
 
     @pytest.mark.asyncio
     async def test_fetch_success_notifies_subscribers(self) -> None:
-        """Successful fetch notifies subscribers with Delta."""
+        """Successful fetch notifies subscribers with affects function."""
         store = ApiDataStore(api_key="secret-key-123")
-        notifications: list[Delta] = []
-        store.subscribe(lambda delta: notifications.append(delta))
+        affected_paths: list[bool] = []
+        store.subscribe(lambda affects: affected_paths.append(affects("data.user_info")))
 
         payload = FetchPayload(api_endpoint="success.com", data_result_key="user_info")
         await store.fetch_data(payload)
 
-        assert len(notifications) == 1
-        assert notifications[0].diff  # non-empty
+        assert len(affected_paths) == 1
+        assert affected_paths[0] is True  # data.user_info was affected
 
 
 class TestAsyncActionInstanceError:
@@ -186,16 +186,16 @@ class TestAsyncActionInstanceError:
 
     @pytest.mark.asyncio
     async def test_fetch_failure_notifies_subscribers(self) -> None:
-        """Failed fetch notifies subscribers with Delta."""
+        """Failed fetch notifies subscribers with affects function."""
         store = ApiDataStore(api_key="secret-key-456")
-        notifications: list[Delta] = []
-        store.subscribe(lambda delta: notifications.append(delta))
+        affected_paths: list[bool] = []
+        store.subscribe(lambda affects: affected_paths.append(affects("data.weather")))
 
         payload = FetchPayload(api_endpoint="fail.com", data_result_key="weather")
         await store.fetch_data(payload)
 
-        assert len(notifications) == 1
-        assert notifications[0].diff  # non-empty
+        assert len(affected_paths) == 1
+        assert affected_paths[0] is True  # data.weather was affected
 
 
 class TestAsyncActionInstanceMultiple:
@@ -207,7 +207,7 @@ class TestAsyncActionInstanceMultiple:
         store = ApiDataStore(api_key="multi-key")
         notification_count = 0
 
-        def on_change(_: Delta) -> None:
+        def on_change(_: Callable[[str], bool]) -> None:
             nonlocal notification_count
             notification_count += 1
 

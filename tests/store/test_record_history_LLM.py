@@ -126,7 +126,7 @@ class TestRecordHistory:
         runtime.create_agent("agent", MockLLMClient(), mock_system_prompt())
 
         notifications: list[bool] = []
-        store.subscribe(lambda delta: notifications.append(True))
+        store.subscribe(lambda _affects: notifications.append(True))
 
         store.record_history({
             "agent_name": "agent",

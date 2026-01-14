@@ -10,10 +10,8 @@ and when all tasks complete (success or failure), a callback is triggered.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-
-from deepdiff import Delta
 
 if TYPE_CHECKING:
     from agent_lib.store.Store import Store
@@ -98,8 +96,8 @@ class Fanouts:
         self._callbacks[fanout_id] = on_complete
 
         # Subscribe to watch for completion
-        def check_completion(delta: Delta) -> None:
-            self._check_completion(fanout_id, fanout_description, delta)
+        def check_completion(_affects: Callable[[str], bool]) -> None:
+            self._check_completion(fanout_id, fanout_description)
 
         unsubscribe = self._store.subscribe(check_completion)
         self._unsubscribers[fanout_id] = unsubscribe
@@ -145,13 +143,13 @@ class Fanouts:
         return bound
 
     def _check_completion(
-        self, fanout_id: str, fanout_description: str, delta: Delta
+        self, fanout_id: str, fanout_description: str
     ) -> None:
         """Subscriber callback - checks if all tasks resolved, fires on_complete.
 
         Args:
             fanout_id: The fanout to check
-            delta: The delta from the last action (used to verify relevant change)
+            fanout_description: Description of the fanout
         """
         if fanout_id not in self.registry:
             return

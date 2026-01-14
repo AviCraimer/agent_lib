@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 import pytest
-from deepdiff import Delta
 
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.Store import Store
@@ -74,28 +74,34 @@ class NotificationTestStore(Store, HasData):
 class TestSubscribe:
     """Tests for Store.subscribe() basic functionality."""
 
-    def test_subscribe_receives_delta_on_sync_action(self) -> None:
-        """Subscriber callback receives Delta when sync action triggers change."""
+    def test_subscribe_receives_affects_on_sync_action(self) -> None:
+        """Subscriber callback receives affects function when sync action triggers change."""
         store = NotificationTestStore()
-        received: list[Delta] = []
+        notifications: list[bool] = []
 
-        store.subscribe(lambda d: received.append(d))
+        def on_change(affects: Callable[[str], bool]) -> None:
+            notifications.append(affects("data.name"))
+
+        store.subscribe(on_change)
         store.set_sync(SetPayload("name", "Alice"))
 
-        assert len(received) == 1
-        assert received[0].diff  # non-empty
+        assert len(notifications) == 1
+        assert notifications[0] is True  # data.name was affected
 
     @pytest.mark.asyncio
-    async def test_subscribe_receives_delta_on_async_action(self) -> None:
-        """Subscriber callback receives Delta when async action triggers change."""
+    async def test_subscribe_receives_affects_on_async_action(self) -> None:
+        """Subscriber callback receives affects function when async action triggers change."""
         store = NotificationTestStore()
-        received: list[Delta] = []
+        notifications: list[bool] = []
 
-        store.subscribe(lambda d: received.append(d))
+        def on_change(affects: Callable[[str], bool]) -> None:
+            notifications.append(affects("data.name"))
+
+        store.subscribe(on_change)
         await store.set_async(SetPayload("name", "Bob"))
 
-        assert len(received) == 1
-        assert received[0].diff  # non-empty
+        assert len(notifications) == 1
+        assert notifications[0] is True  # data.name was affected
 
 
 class TestUnsubscribe:
@@ -106,7 +112,7 @@ class TestUnsubscribe:
         store = NotificationTestStore()
         call_count = 0
 
-        def callback(_: Delta) -> None:
+        def callback(_: Callable[[str], bool]) -> None:
             nonlocal call_count
             call_count += 1
 
@@ -124,7 +130,7 @@ class TestUnsubscribe:
         store = NotificationTestStore()
         call_count = 0
 
-        def callback(_: Delta) -> None:
+        def callback(_: Callable[[str], bool]) -> None:
             nonlocal call_count
             call_count += 1
 
@@ -141,28 +147,29 @@ class TestMultipleSubscribers:
     """Tests for multiple subscriber behavior."""
 
     def test_multiple_subscribers_all_notified(self) -> None:
-        """All subscribers receive the Delta."""
+        """All subscribers receive the affects function."""
         store = NotificationTestStore()
-        calls_1: list[Delta] = []
-        calls_2: list[Delta] = []
+        calls_1: list[bool] = []
+        calls_2: list[bool] = []
 
-        store.subscribe(lambda d: calls_1.append(d))
-        store.subscribe(lambda d: calls_2.append(d))
+        store.subscribe(lambda affects: calls_1.append(affects("data.key")))
+        store.subscribe(lambda affects: calls_2.append(affects("data.key")))
 
         store.set_sync(SetPayload("key", "value"))
 
         assert len(calls_1) == 1
         assert len(calls_2) == 1
-        assert calls_1[0].diff == calls_2[0].diff
+        assert calls_1[0] is True
+        assert calls_2[0] is True
 
     def test_unsubscribe_one_keeps_others(self) -> None:
         """Unsubscribing one subscriber doesn't affect others."""
         store = NotificationTestStore()
-        calls_1: list[Delta] = []
-        calls_2: list[Delta] = []
+        calls_1: list[bool] = []
+        calls_2: list[bool] = []
 
-        unsub_1 = store.subscribe(lambda d: calls_1.append(d))
-        store.subscribe(lambda d: calls_2.append(d))
+        unsub_1 = store.subscribe(lambda _: calls_1.append(True))
+        store.subscribe(lambda _: calls_2.append(True))
 
         store.set_sync(SetPayload("a", "1"))
         assert len(calls_1) == 1
@@ -173,3 +180,37 @@ class TestMultipleSubscribers:
         store.set_sync(SetPayload("b", "2"))
         assert len(calls_1) == 1  # unchanged
         assert len(calls_2) == 2  # still receiving
+
+
+class TestAffectsFunction:
+    """Tests for the affects() helper function."""
+
+    def test_affects_returns_true_for_changed_path(self) -> None:
+        """affects() returns True for paths that were changed."""
+        store = NotificationTestStore()
+        results: list[bool] = []
+
+        def on_change(affects: Callable[[str], bool]) -> None:
+            results.append(affects("data.name"))
+            results.append(affects("data.other"))
+
+        store.subscribe(on_change)
+        store.set_sync(SetPayload("name", "Alice"))
+
+        assert results[0] is True  # data.name was changed
+        assert results[1] is False  # data.other was not changed
+
+    def test_affects_partial_path_match(self) -> None:
+        """affects() matches partial paths."""
+        store = NotificationTestStore()
+        results: list[bool] = []
+
+        def on_change(affects: Callable[[str], bool]) -> None:
+            results.append(affects("data"))  # broader path
+            results.append(affects("name"))  # just the key name
+
+        store.subscribe(on_change)
+        store.set_sync(SetPayload("name", "Alice"))
+
+        assert results[0] is True  # "data" is in the path
+        assert results[1] is True  # "name" is in the path
