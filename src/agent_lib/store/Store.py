@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
-from typing import Any, Self, TypedDict, overload
+from typing import Any, Self, overload
 
 from deepdiff import DeepDiff, Delta, parse_path
 
@@ -14,13 +14,6 @@ from agent_lib.store.Fanouts import Fanouts
 from agent_lib.store.snapshot import snapshot
 from agent_lib.store.State import State
 from agent_lib.store.Subscribers import SubscriberCallback, Subscribers
-
-
-class UpdateShouldActPayload(TypedDict):
-    """Payload for the update_should_act action."""
-
-    agent_name: str
-    should_act: bool
 
 
 class Store[StateT: State = State]:
@@ -69,6 +62,10 @@ class Store[StateT: State = State]:
         self._fanouts = Fanouts(self)
         self._bind_actions()
         self._bind_async_actions()
+
+    @property
+    def state(self):
+        return snapshot(self._state)
 
     def _bind_actions(self) -> None:
         """Find all Action class attributes and bind them to this instance."""
@@ -149,7 +146,7 @@ class Store[StateT: State = State]:
         Scope format:
             Actions return a frozenset of dot-notation paths indicating which parts of the store were modified, e.g., frozenset({'data.user_info'}). Use '.' as a scope element to trigger a full diff of the entire store.
         """
-        state_snapshot = snapshot(self)
+        store_snapshot = snapshot(self)
         scope = handler(self, payload)
 
         if not scope:  # no-op
@@ -157,10 +154,10 @@ class Store[StateT: State = State]:
 
         # "." means full diff, otherwise filter to specified scope paths
         if "." in scope:
-            diff = DeepDiff(state_snapshot, self)
+            diff = DeepDiff(store_snapshot, self)
         else:
             diff = DeepDiff(
-                state_snapshot,
+                store_snapshot,
                 self,
                 include_obj_callback=self._make_scope_filter(scope),
             )
@@ -265,21 +262,11 @@ class Store[StateT: State = State]:
 
         return bound
 
-    @action
-    def update_should_act(
-        self, payload: UpdateShouldActPayload
-    ) -> frozenset[str]:
-        """Update an agent's should_act flag.
 
-        This is a core action used by AgentRuntime to control agent execution.
-        Agents can use this (via a tool) to signal completion or to activate other agents.
+# Import at module level after class definition to avoid circular import
+from agent_lib.store.actions.update_should_act import (  # noqa: E402
+    update_should_act as _update_should_act_action,
+)
 
-        Args:
-            payload: Contains agent_name and should_act boolean
-
-        Returns:
-            Scope indicating agent_state was modified
-        """
-        agent_name = payload["agent_name"]
-        self._state.agent_state[agent_name].should_act = payload["should_act"]
-        return frozenset({"_state.agent_state"})
+# Add as class attribute
+Store.update_should_act = _update_should_act_action  # type: ignore[attr-defined]

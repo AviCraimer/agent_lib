@@ -6,21 +6,27 @@ from agent_lib.store.State import State
 from agent_lib.store.Store import Store
 
 
+@dataclass
 class ExactLengthState(State):
-    current_text: str
-    wordcount: int
-    target_wordcount: int
-    user_prompt: str
+    user_prompt: str = ""
+    target_wordcount: int = 0
+    current_text: str = ""
+    wordcount: int = 0
+
+
+def get_wordcount(text: str) -> int:
+    return len(text.split(" "))
 
 
 class ExactLengthStore(Store[ExactLengthState]):
     _state: ExactLengthState
 
     def __init__(self, user_prompt: str, target_wordcount: int) -> None:
+        self._state = ExactLengthState(
+            user_prompt=user_prompt,
+            target_wordcount=target_wordcount,
+        )
         super().__init__()
-
-        self._state.user_prompt = user_prompt
-        self._state.target_wordcount = target_wordcount
 
         # Subscribe to trigger update_wordcount when current_text changes
         self.subscribe(self._on_text_change)
@@ -37,6 +43,6 @@ class ExactLengthStore(Store[ExactLengthState]):
     @Store.action
     def update_wordcount(self: Self, payload: None = None) -> frozenset[str]:
         text = self._state.current_text
-        count = len(text.split(" "))
-        self._state.wordcount = count
+
+        self._state.wordcount = get_wordcount(text)
         return frozenset({"_state.wordcount"})

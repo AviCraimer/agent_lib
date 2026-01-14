@@ -114,6 +114,19 @@ class CtxComponent[P: Props]:
     def __call__(self, props: P | Children) -> CtxComponent[NoProps]:
         return self.pass_props(props)
 
+    def __str__(self) -> str:
+        """Render the component to a string if it requires no props.
+
+        Raises:
+            TypeError: If the component requires props to render.
+        """
+        if self._PropsClass is NoProps:
+            return self.render(NoProps())  # type: ignore[arg-type]
+        raise TypeError(
+            f"Cannot convert CtxComponent to string: requires {self._PropsClass.__name__} props. "
+            "Use .render(props) or .pass_props(props) first."
+        )
+
 
 @propsclass
 class TagProps(Props):
@@ -142,6 +155,11 @@ class Tag(CtxComponent[TagProps]):
         slash = "" if open else "/"
         tag = f"{line_break}<{slash}{props.tag}>{line_break}"
         return tag
+
+
+PromptTag = Tag().preset(TagProps(tag="prompt", line_breaks=True))
+
+SystemTag = Tag().preset(TagProps(tag="system", line_breaks=True))
 
 
 @propsclass
