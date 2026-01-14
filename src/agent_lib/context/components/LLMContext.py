@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import JustChildren, NoProps, Props
 
@@ -12,20 +13,15 @@ class SystemPromp(CtxComponent[JustChildren]):
 
 
 class UserRoleMsgCtx(CtxComponent[NoProps]):
-    def __init__(
-        self, context_component: CtxComponent[NoProps], role_name: str = "user"
-    ):
+    def __init__(self, context_component: CtxComponent[NoProps]):
         def render_fn(props: NoProps):
             return context_component.render()
 
-        self.role_name = role_name
         super().__init__(render_fn, NoProps)
 
 
 class AgentRoleMsgCtx(CtxComponent[NoProps]):
-    def __init__(
-        self, context_component: CtxComponent[NoProps], role_name: str = "assistant"
-    ):
+    def __init__(self, context_component: CtxComponent[NoProps]):
         def render_fn(props: NoProps):
             return context_component.render()
 
@@ -35,6 +31,7 @@ class AgentRoleMsgCtx(CtxComponent[NoProps]):
 type ChatMsgCtx = UserRoleMsgCtx | AgentRoleMsgCtx
 
 
-class LLMContextProps(Props):
-    children: list[ChatMsgCtx]
-    system_ctx: CtxComponent[NoProps]
+@dataclass
+class LLMContext:
+    messages: list[ChatMsgCtx]
+    system_prompt: CtxComponent[NoProps]

@@ -56,7 +56,7 @@ class TestToolInvocation:
     def test_invoke_tool(self) -> None:
         """Invoking a tool calls its handler with the payload."""
         agent = Agent(name="agent")
-        tool = Tool(name="double", description="Double a number", json_schema="{}", handler=lambda x: x * 2)
+        tool = Tool(name="double", description="Double a number", json_schema="{}", handler=lambda x: x * 2)  # pyright: ignore[reportUnknownLambdaType, reportOperatorIssue]
 
         agent.grant_tool(tool)
         result = agent.invoke("double", 21)

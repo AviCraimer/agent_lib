@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 import re
-from typing import Any, Callable, Tuple, TypeGuard, cast
+from typing import Any, Callable, Sequence, Tuple, TypeGuard, cast
 
 from agent_lib.context.Props import Props, NoProps, JustChildren, propsclass
 
 
-type RequiredChildren = CtxComponent[NoProps] | str | list[Children]
+type RequiredChildren = CtxComponent[NoProps] | str | Sequence[Children]
 
 type Children = RequiredChildren | None
 
@@ -76,9 +76,9 @@ class CtxComponent[P: Props]:
                 render_list = [s]
             case CtxComponent() as component:
                 render_list = [component.render(NoProps())]
-            case list() as child_list:
+            case _:
                 render_list = [
-                    CtxComponent.render_children(child) for child in child_list
+                    CtxComponent.render_children(child) for child in children
                 ]
         # Note to self: I may remove the delimitor entirelty for now it's just here for reference.
         return "".join([wrap(s, list_item_delimitor) for s in render_list])
