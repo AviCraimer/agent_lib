@@ -1,4 +1,7 @@
 from dataclasses import dataclass
+import json
+from agent_lib.agent.Agent import ToolCall
+from agent_lib.agent.LLMClient import LLMClient
 from agent_lib.context.CtxComponent import (
     CtxComponent,
     PromptTag,
@@ -8,6 +11,7 @@ from agent_lib.context.CtxComponent import (
 )
 
 from agent_lib.context.Props import Props, propsclass
+from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.examples.exact_text_length.store import ExactLengthStore
 from agent_lib.llm_integrations.anthropic.claude_client import ClaudeClient
 
@@ -35,7 +39,17 @@ def render_fn(props: WriterProps):
 
 WriterComponent = CtxComponent(render_fn, WriterProps)
 
-writer_llm_client = ClaudeClient()
+
+class WriterLlmClient(LLMClient):
+    claude_client = ClaudeClient("opus")
+    message_json_schema = claude_client.message_json_schema
+
+    def get_response(self, context: LLMContext):
+        text = self.claude_client.get_response(context)
+
+        call = {"tool_calls": [{"tool_name": "update_text", "payload": text}]}
+
+        return json.dumps(call)
 
 
 def map_store_to_writer(store: ExactLengthStore) -> WriterProps:

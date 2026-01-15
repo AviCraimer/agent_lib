@@ -95,7 +95,9 @@ class ClaudeClient:
 
             # Claude API requires at least one message
             if not cleaned_messages:
-                cleaned_messages = [{"role": "user", "content": ""}]
+                cleaned_messages: list[MessageParam] = [
+                    {"role": "user", "content": "Please follow the system prompt."}
+                ]
 
             params: MessageCreateParamsBase = {
                 **self.config,

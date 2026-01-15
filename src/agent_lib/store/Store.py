@@ -11,6 +11,7 @@ from agent_lib.store.Action import Action
 from agent_lib.store.Agents import Agents
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.Fanouts import Fanouts
+from agent_lib.store.actions.update_should_act import update_should_act
 from agent_lib.store.snapshot import snapshot
 from agent_lib.store.State import State
 from agent_lib.store.Subscribers import SubscriberCallback, Subscribers
@@ -262,11 +263,4 @@ class Store[StateT: State = State]:
 
         return bound
 
-
-# Import at module level after class definition to avoid circular import
-from agent_lib.store.actions.update_should_act import (  # noqa: E402
-    update_should_act as _update_should_act_action,
-)
-
-# Add as class attribute
-Store.update_should_act = _update_should_act_action  # type: ignore[attr-defined]
+    update_should_act = update_should_act

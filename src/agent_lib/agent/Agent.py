@@ -43,11 +43,11 @@ TOOL_CALL_RESPONSE_SCHEMA = {
                 "type": "object",
                 "properties": {
                     "tool_name": {"type": "string"},
-                    "payload": {"type": "object"},
+                    "payload": {"anyOf": [{"type": "object"}, {"type": "string"}]},
                 },
                 "required": ["tool_name"],
             },
-        },
+        }
     },
     "required": ["tool_calls"],
 }

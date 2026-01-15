@@ -11,7 +11,10 @@ and executes tool calls returned by agents.
 from __future__ import annotations
 
 from collections.abc import Callable
+import json
 from typing import TYPE_CHECKING, Any, Literal
+
+import jsonschema
 
 from agent_lib.agent.Agent import Agent
 from agent_lib.agent.AgentState import AgentState
@@ -56,7 +59,7 @@ class AgentRuntime:
 
     _store: Store
     _agents: dict[str, Agent]
-    _tools: dict[str, dict[str, Tool[Any, Any]]]
+    _tools: dict[str, dict[str, Tool[Any, Any]]]  # agent_name -> tool_name -> Tool
 
     def __init__(self, store: Store) -> None:
         """Create an AgentRuntime managing agents for the given Store.
@@ -111,7 +114,9 @@ class AgentRuntime:
         if messages is None:
             messages = self._store.connect(
                 ChatMessages,
-                lambda s, n=name: ChatMessagesProps(history=s._state.agent_state[n].history),
+                lambda s, n=name: ChatMessagesProps(
+                    history=s._state.agent_state[n].history
+                ),
             )
 
         # Create context (connected to store, renders dynamically)
@@ -122,7 +127,9 @@ class AgentRuntime:
             return self._store._state.agent_state[agent_name]
 
         # Create Agent instance (held here, not in Store)
-        agent = Agent(name=name, llm_client=llm_client, context=context, get_state=get_state)
+        agent = Agent(
+            name=name, llm_client=llm_client, context=context, get_state=get_state
+        )
         self._agents[name] = agent
 
         # Grant should_act tool if access is specified (empty frozenset is falsy, "all" is truthy)
@@ -245,28 +252,6 @@ class AgentRuntime:
             name=name, description=description, json_schema=json_schema, handler=handler
         )
 
-    def make_tool[P, R](
-        self,
-        name: str,
-        description: str,
-        json_schema: str,
-        handler: Callable[[P], R],
-    ) -> Tool[P, R]:
-        """Create a custom tool (convenience method).
-
-        Args:
-            name: Tool name
-            description: Human-readable description
-            json_schema: JSON schema string describing the payload format
-            handler: Function to call when tool is invoked
-
-        Returns:
-            The created Tool
-        """
-        return Tool(
-            name=name, description=description, json_schema=json_schema, handler=handler
-        )
-
     def make_should_act_tool(
         self,
         allowed_agents: frozenset[str] | Literal["all"],
@@ -298,7 +283,7 @@ class AgentRuntime:
             handler=handler,
         )
 
-    def run(self) -> None:
+    def run_once(self) -> None:
         """Run one iteration of the agent loop.
 
         Checks all agents for should_act=True, calls step() on each active agent,
@@ -307,13 +292,17 @@ class AgentRuntime:
         This should be called repeatedly (e.g., in a while loop) to drive agent execution.
         """
         for agent_name, agent in self._agents.items():
-            state = self._store._state.agent_state.get(agent_name)
+            state = self.get_agent_state(agent_name)
             if state and state.should_act:
                 tool_calls = agent.step()
 
                 # Execute each tool call
                 for tool_call in tool_calls:
                     tool_name = tool_call["tool_name"]
-                    payload = tool_call.get("payload", {})
+                    payload = tool_call["payload"]
                     tool = self._tools[agent_name][tool_name]
+
+                    # TODO
+                    # schema = json.loads(tool.to_metadata().json_schema)
+                    # jsonschema.validate(payload, schema)
                     tool(payload)

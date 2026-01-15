@@ -12,6 +12,7 @@ class ExactLengthState(State):
     target_wordcount: int = 0
     current_text: str = ""
     wordcount: int = 0
+    finished: bool = False
 
 
 def get_wordcount(text: str) -> int:
@@ -35,6 +36,9 @@ class ExactLengthStore(Store[ExactLengthState]):
         if affects("current_text"):
             self.update_wordcount(None)
 
+        if self._state.wordcount == self._state.target_wordcount:
+            self.set_finished(True)
+
     @Store.action
     def update_text(self: Self, new_text: str) -> frozenset[str]:
         self._state.current_text = new_text
@@ -46,3 +50,8 @@ class ExactLengthStore(Store[ExactLengthState]):
 
         self._state.wordcount = get_wordcount(text)
         return frozenset({"_state.wordcount"})
+
+    @Store.action
+    def set_finished(self: Self, payload: bool):
+        self._state.finished = payload
+        return frozenset({"_state.finished"})
