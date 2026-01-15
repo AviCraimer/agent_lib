@@ -8,12 +8,12 @@ from deepdiff import DeepDiff, Delta, parse_path
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps, Props
 from agent_lib.store.Action import Action
-from agent_lib.store.Agents import Agents
 from agent_lib.store.AsyncAction import AsyncAction
 from agent_lib.store.Fanouts import Fanouts
 from agent_lib.store.actions.update_should_act import update_should_act
 from agent_lib.store.snapshot import snapshot
-from agent_lib.store.State import State
+from agent_lib.store.state.AgentState import validate_agent_state
+from agent_lib.store.state.State import State
 from agent_lib.store.Subscribers import SubscriberCallback, Subscribers
 
 
@@ -21,7 +21,6 @@ class Store[StateT: State = State]:
     _actions: dict[str, Callable[..., None]]
     _subscribers: Subscribers
     _fanouts: Fanouts
-    _agents: Agents
     _state: StateT
 
     @staticmethod
@@ -58,8 +57,7 @@ class Store[StateT: State = State]:
         if not hasattr(self, "_state"):
             self._state = State()  # type: ignore[assignment]
         self._subscribers = Subscribers(self)
-        self._agents = Agents(self)
-        self._agents.validate()
+        validate_agent_state(self._state.agent_state)
         self._fanouts = Fanouts(self)
         self._bind_actions()
         self._bind_async_actions()

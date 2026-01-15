@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from agent_lib.agent.ToolMetadata import ToolMetadata
+from agent_lib.tool.ToolMetadata import ToolMetadata
 
 
 @dataclass

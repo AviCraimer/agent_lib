@@ -17,9 +17,9 @@ from typing import TYPE_CHECKING, Any, Literal
 import jsonschema
 
 from agent_lib.agent.Agent import Agent
-from agent_lib.agent.AgentState import AgentState
+from agent_lib.store.state.AgentState import AgentState
 from agent_lib.agent.LLMClient import LLMClient
-from agent_lib.agent.Tool import Tool
+from agent_lib.tool.Tool import Tool
 from agent_lib.context.components.ChatMessages import ChatMessages, ChatMessagesProps
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent

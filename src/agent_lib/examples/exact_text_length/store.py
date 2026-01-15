@@ -2,7 +2,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Self
 
-from agent_lib.store.State import State
+from agent_lib.store.state.State import State
 from agent_lib.store.Store import Store
 
 

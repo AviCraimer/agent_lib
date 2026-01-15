@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from agent_lib.agent.ToolMetadata import ToolMetadata
+from agent_lib.tool.ToolMetadata import ToolMetadata
 
 
 @dataclass
@@ -46,3 +46,28 @@ class AgentState:
     should_act: bool = field(default=False)
     history: list[dict[str, str]] = field(default_factory=list)
     tools: list[ToolMetadata] = field(default_factory=list)
+
+
+def validate_agent_state(agent_state: dict[str, AgentState] | None) -> None:
+    """Validate that agent_state dict keys match agent_name attributes.
+
+    Raises:
+        TypeError: If agent_state is not a dict or contains non-AgentState values
+        ValueError: If any key doesn't match its AgentState.agent_name
+    """
+    if not agent_state:
+        return
+
+    if not isinstance(agent_state, dict):
+        raise TypeError("agent_state must be a dict[str, AgentState]")
+
+    for key, state in agent_state.items():
+        if not isinstance(state, AgentState):
+            raise TypeError(
+                f"agent_state['{key}'] must be an AgentState, "
+                f"got {type(state).__name__}"
+            )
+        if key != state.agent_name:
+            raise ValueError(
+                f"agent_state key '{key}' doesn't match agent_name '{state.agent_name}'"
+            )

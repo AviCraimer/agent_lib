@@ -9,8 +9,9 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from agent_lib.agent.AgentState import AgentState
-from agent_lib.store.State import State
+from agent_lib.store.state.AgentState import AgentState
+
+from agent_lib.store.state.State import State
 from agent_lib.store.Store import Store
 
 

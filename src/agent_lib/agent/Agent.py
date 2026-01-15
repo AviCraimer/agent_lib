@@ -16,7 +16,7 @@ from typing import Any, TypedDict
 
 import jsonschema
 
-from agent_lib.agent.AgentState import AgentState
+from agent_lib.store.state.AgentState import AgentState
 from agent_lib.agent.LLMClient import LLMClient
 from agent_lib.context.components.LLMContext import LLMContext
 

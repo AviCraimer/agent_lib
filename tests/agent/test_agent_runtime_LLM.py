@@ -10,10 +10,10 @@ from dataclasses import dataclass, field
 import pytest
 
 from agent_lib.agent.Agent import Agent
-from agent_lib.agent.AgentRuntime import AgentRuntime
-from agent_lib.agent.AgentState import AgentState
-from agent_lib.agent.Tool import Tool
-from agent_lib.agent.ToolMetadata import ToolMetadata
+from agent_lib.agent_app.AgentRuntime import AgentRuntime
+from agent_lib.store.state.AgentState import AgentState
+from agent_lib.tool.Tool import Tool
+from agent_lib.tool.ToolMetadata import ToolMetadata
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
@@ -62,7 +62,9 @@ class TestAgentCreation:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("planner", MockLLMClient(), mock_system_prompt(), state_class=PlannerState)
+        runtime.create_agent(
+            "planner", MockLLMClient(), mock_system_prompt(), state_class=PlannerState
+        )
         state = runtime.get_agent_state("planner")
 
         assert isinstance(state, PlannerState)
@@ -152,7 +154,12 @@ class TestGrantTool:
         """grant_tool adds tool metadata to agent's state."""
         store = Store()
         runtime = AgentRuntime(store)
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
         runtime.grant_tool("agent", tool)
@@ -167,7 +174,12 @@ class TestGrantTool:
         """grant_tool stores the tool handler in the runtime."""
         store = Store()
         runtime = AgentRuntime(store)
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
         runtime.grant_tool("agent", tool)
@@ -195,7 +207,12 @@ class TestRevokeTool:
         """revoke_tool removes tool from both state and runtime."""
         store = Store()
         runtime = AgentRuntime(store)
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
         runtime.grant_tool("agent", tool)
@@ -218,7 +235,12 @@ class TestRevokeTool:
         """revoke_tool raises KeyError for nonexistent tool."""
         store = Store()
         runtime = AgentRuntime(store)
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         with pytest.raises(KeyError, match="not granted"):
             runtime.revoke_tool("agent", "nonexistent")
@@ -259,7 +281,12 @@ class TestActionToTool:
 
         store = CounterStore()
         runtime = AgentRuntime(store)
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         tool = runtime.action_to_tool("increment")
         runtime.grant_tool("agent", tool)
@@ -317,8 +344,12 @@ class TestRun:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("active", TrackingLLMClient("active"), mock_system_prompt())
-        runtime.create_agent("inactive", TrackingLLMClient("inactive"), mock_system_prompt())
+        runtime.create_agent(
+            "active", TrackingLLMClient("active"), mock_system_prompt()
+        )
+        runtime.create_agent(
+            "inactive", TrackingLLMClient("inactive"), mock_system_prompt()
+        )
 
         # Set one agent to active
         store.update_should_act({"agent_name": "active", "should_act": True})
@@ -344,8 +375,12 @@ class TestRun:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("agent1", TrackingLLMClient("agent1"), mock_system_prompt())
-        runtime.create_agent("agent2", TrackingLLMClient("agent2"), mock_system_prompt())
+        runtime.create_agent(
+            "agent1", TrackingLLMClient("agent1"), mock_system_prompt()
+        )
+        runtime.create_agent(
+            "agent2", TrackingLLMClient("agent2"), mock_system_prompt()
+        )
 
         # Both agents have should_act=False by default
         runtime.run()
@@ -365,9 +400,10 @@ class TestRun:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent(
-            "agent", ToolCallingLLMClient(), mock_system_prompt()        )
-        tool = Tool("record", "Record a value", "{}", lambda p: results.append(p["value"]))
+        runtime.create_agent("agent", ToolCallingLLMClient(), mock_system_prompt())
+        tool = Tool(
+            "record", "Record a value", "{}", lambda p: results.append(p["value"])
+        )
         runtime.grant_tool("agent", tool)
 
         store.update_should_act({"agent_name": "agent", "should_act": True})
@@ -398,7 +434,12 @@ class TestSecurityBoundary:
         """Tool metadata is in state, handler is in runtime only."""
         store = Store()
         runtime = AgentRuntime(store)
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
         runtime.grant_tool("agent", tool)
@@ -424,8 +465,15 @@ class TestShouldActAccess:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("agent1", MockLLMClient(), mock_system_prompt(), should_act_access="all")
-        runtime.create_agent("agent2", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent1", MockLLMClient(), mock_system_prompt(), should_act_access="all"
+        )
+        runtime.create_agent(
+            "agent2",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         # agent1 should be able to update agent2
         tool = runtime._tools["agent1"]["update_should_act"]
@@ -438,9 +486,24 @@ class TestShouldActAccess:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("agent1", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset({"agent2"}))
-        runtime.create_agent("agent2", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
-        runtime.create_agent("agent3", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent1",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset({"agent2"}),
+        )
+        runtime.create_agent(
+            "agent2",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
+        runtime.create_agent(
+            "agent3",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         # agent1 can update agent2
         tool = runtime._tools["agent1"]["update_should_act"]
@@ -456,8 +519,18 @@ class TestShouldActAccess:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("agent1", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset({"agent1"}))
-        runtime.create_agent("agent2", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent1",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset({"agent1"}),
+        )
+        runtime.create_agent(
+            "agent2",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         # agent1 can update itself
         tool = runtime._tools["agent1"]["update_should_act"]
@@ -473,7 +546,12 @@ class TestShouldActAccess:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("agent", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         # No update_should_act tool should be granted
         assert "update_should_act" not in runtime._tools["agent"]
@@ -486,8 +564,18 @@ class TestShouldActAccess:
         store = Store()
         runtime = AgentRuntime(store)
 
-        runtime.create_agent("agent1", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset({"agent1"}))
-        runtime.create_agent("agent2", MockLLMClient(), mock_system_prompt(), should_act_access=frozenset())
+        runtime.create_agent(
+            "agent1",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset({"agent1"}),
+        )
+        runtime.create_agent(
+            "agent2",
+            MockLLMClient(),
+            mock_system_prompt(),
+            should_act_access=frozenset(),
+        )
 
         tool = runtime._tools["agent1"]["update_should_act"]
 

@@ -1,4 +1,4 @@
-from agent_lib.agent.AgentRuntime import AgentRuntime
+from agent_lib.agent_app.AgentRuntime import AgentRuntime
 from agent_lib.examples.exact_text_length.store import ExactLengthStore
 from agent_lib.examples.exact_text_length.writer_agent import (
     WriterComponent,

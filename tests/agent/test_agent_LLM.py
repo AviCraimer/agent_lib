@@ -7,8 +7,8 @@ import json
 import pytest
 
 from agent_lib.agent.Agent import Agent
-from agent_lib.agent.AgentState import AgentState
-from agent_lib.agent.ToolMetadata import ToolMetadata
+from agent_lib.store.state.AgentState import AgentState
+from agent_lib.tool.ToolMetadata import ToolMetadata
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 
@@ -107,11 +107,13 @@ class TestToolQueries:
 
     def test_list_tools_with_tools(self) -> None:
         """list_tools returns names of tools in state."""
-        state = mock_state([
-            ToolMetadata("a", "Tool A", "{}"),
-            ToolMetadata("b", "Tool B", "{}"),
-            ToolMetadata("c", "Tool C", "{}"),
-        ])
+        state = mock_state(
+            [
+                ToolMetadata("a", "Tool A", "{}"),
+                ToolMetadata("b", "Tool B", "{}"),
+                ToolMetadata("c", "Tool C", "{}"),
+            ]
+        )
         agent = Agent(
             name="agent",
             llm_client=MockLLMClient(),
@@ -208,10 +210,12 @@ class TestStep:
 
     def test_step_returns_multiple_tool_calls(self) -> None:
         """step() returns all tool calls from LLM response."""
-        state = mock_state([
-            ToolMetadata("tool_a", "Tool A", "{}"),
-            ToolMetadata("tool_b", "Tool B", "{}"),
-        ])
+        state = mock_state(
+            [
+                ToolMetadata("tool_a", "Tool A", "{}"),
+                ToolMetadata("tool_b", "Tool B", "{}"),
+            ]
+        )
         mock_client = MockLLMClient(
             '{"tool_calls": [{"tool_name": "tool_a", "payload": {"x": 1}}, {"tool_name": "tool_b", "payload": {"y": 2}}]}'
         )

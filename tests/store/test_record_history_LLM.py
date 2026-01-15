@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from agent_lib.agent.AgentRuntime import AgentRuntime
+from agent_lib.agent_app.AgentRuntime import AgentRuntime
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
@@ -42,10 +42,12 @@ class TestRecordHistory:
         runtime = AgentRuntime(store)
         runtime.create_agent("agent", MockLLMClient(), mock_system_prompt())
 
-        store.record_history({
-            "agent_name": "agent",
-            "messages": [{"role": "user", "content": "Hello"}],
-        })
+        store.record_history(
+            {
+                "agent_name": "agent",
+                "messages": [{"role": "user", "content": "Hello"}],
+            }
+        )
 
         state = runtime.get_agent_state("agent")
         assert state is not None
@@ -58,13 +60,15 @@ class TestRecordHistory:
         runtime = AgentRuntime(store)
         runtime.create_agent("agent", MockLLMClient(), mock_system_prompt())
 
-        store.record_history({
-            "agent_name": "agent",
-            "messages": [
-                {"role": "user", "content": "Hello"},
-                {"role": "assistant", "content": "Hi there!"},
-            ],
-        })
+        store.record_history(
+            {
+                "agent_name": "agent",
+                "messages": [
+                    {"role": "user", "content": "Hello"},
+                    {"role": "assistant", "content": "Hi there!"},
+                ],
+            }
+        )
 
         state = runtime.get_agent_state("agent")
         assert state is not None
@@ -78,14 +82,18 @@ class TestRecordHistory:
         runtime = AgentRuntime(store)
         runtime.create_agent("agent", MockLLMClient(), mock_system_prompt())
 
-        store.record_history({
-            "agent_name": "agent",
-            "messages": [{"role": "user", "content": "First"}],
-        })
-        store.record_history({
-            "agent_name": "agent",
-            "messages": [{"role": "assistant", "content": "Second"}],
-        })
+        store.record_history(
+            {
+                "agent_name": "agent",
+                "messages": [{"role": "user", "content": "First"}],
+            }
+        )
+        store.record_history(
+            {
+                "agent_name": "agent",
+                "messages": [{"role": "assistant", "content": "Second"}],
+            }
+        )
 
         state = runtime.get_agent_state("agent")
         assert state is not None
@@ -100,14 +108,18 @@ class TestRecordHistory:
         runtime.create_agent("agent1", MockLLMClient(), mock_system_prompt())
         runtime.create_agent("agent2", MockLLMClient(), mock_system_prompt())
 
-        store.record_history({
-            "agent_name": "agent1",
-            "messages": [{"role": "user", "content": "For agent1"}],
-        })
-        store.record_history({
-            "agent_name": "agent2",
-            "messages": [{"role": "user", "content": "For agent2"}],
-        })
+        store.record_history(
+            {
+                "agent_name": "agent1",
+                "messages": [{"role": "user", "content": "For agent1"}],
+            }
+        )
+        store.record_history(
+            {
+                "agent_name": "agent2",
+                "messages": [{"role": "user", "content": "For agent2"}],
+            }
+        )
 
         state1 = runtime.get_agent_state("agent1")
         state2 = runtime.get_agent_state("agent2")
@@ -128,9 +140,11 @@ class TestRecordHistory:
         notifications: list[bool] = []
         store.subscribe(lambda _affects: notifications.append(True))
 
-        store.record_history({
-            "agent_name": "agent",
-            "messages": [{"role": "user", "content": "Hello"}],
-        })
+        store.record_history(
+            {
+                "agent_name": "agent",
+                "messages": [{"role": "user", "content": "Hello"}],
+            }
+        )
 
         assert len(notifications) == 1
