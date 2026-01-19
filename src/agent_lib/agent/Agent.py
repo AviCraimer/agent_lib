@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypedDict
 
 import jsonschema
@@ -28,29 +29,8 @@ class ToolCall(TypedDict):
     payload: dict[str, Any]
 
 
-class ToolCallResponse(TypedDict):
-    """Expected JSON format from LLM for tool calls."""
-
-    tool_calls: list[ToolCall]
-
-
-TOOL_CALL_RESPONSE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "tool_calls": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "tool_name": {"type": "string"},
-                    "payload": {"anyOf": [{"type": "object"}, {"type": "string"}]},
-                },
-                "required": ["tool_name"],
-            },
-        }
-    },
-    "required": ["tool_calls"],
-}
+_SCHEMA_PATH = Path(__file__).parent / "tool_call_schema.json"
+TOOL_CALL_RESPONSE_SCHEMA: dict[str, Any] = json.loads(_SCHEMA_PATH.read_text())
 
 
 class Agent:
@@ -155,7 +135,7 @@ class Agent:
             KeyError: If a tool is not granted to this agent
         """
         try:
-            parsed: dict[str, Any] = json.loads(response)
+            tool_calls: list[ToolCall] = json.loads(response)
         except json.JSONDecodeError as e:
             raise json.JSONDecodeError(
                 f"Agent '{self.name}' received invalid JSON response: {e.msg}",
@@ -163,10 +143,8 @@ class Agent:
                 e.pos,
             )
 
-        # Validate response structure
-        jsonschema.validate(parsed, TOOL_CALL_RESPONSE_SCHEMA)
-
-        tool_calls: list[ToolCall] = parsed["tool_calls"]
+        # Validate response structure (array of tool calls)
+        jsonschema.validate(tool_calls, TOOL_CALL_RESPONSE_SCHEMA)
 
         # Get current tool metadata from state
         state = self.get_state()

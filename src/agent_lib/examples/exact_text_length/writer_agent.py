@@ -42,7 +42,7 @@ class WriterLlmClient(LLMClient):
     def get_response(self, context: LLMContext):
         text = self.claude_client.get_response(context)
 
-        call = {"tool_calls": [{"tool_name": "update_text", "payload": text}]}
+        call = [{"tool_name": "update_text", "payload": text}]
 
         return json.dumps(call)
 
