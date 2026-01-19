@@ -18,14 +18,15 @@ from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
 from agent_lib.store.Store import Store
+from agent_lib.util.json_utils import JSONSchema
 
 
 class MockLLMClient:
     """Mock LLM client for testing."""
 
-    message_json_schema: str = "{}"
+    message_json_schema: JSONSchema = JSONSchema({})
 
-    def __init__(self, response: str = '{"tool_calls": []}'):
+    def __init__(self, response: str = "[]"):
         self.response = response
 
     def get_response(self, context: LLMContext) -> str:
@@ -161,7 +162,9 @@ class TestGrantTool:
             should_act_access=frozenset(),
         )
 
-        tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
+        tool = Tool[str, str](
+            "greet", "Greet someone", JSONSchema({}), lambda x: f"Hello, {x}"
+        )
         runtime.grant_tool("agent", tool)
 
         state = runtime.get_agent_state("agent")
@@ -181,7 +184,9 @@ class TestGrantTool:
             should_act_access=frozenset(),
         )
 
-        tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
+        tool = Tool[str, str](
+            "greet", "Greet someone", JSONSchema({}), lambda x: f"Hello, {x}"
+        )
         runtime.grant_tool("agent", tool)
 
         # Handler should be accessible via runtime's internal storage
@@ -194,7 +199,9 @@ class TestGrantTool:
         store = Store()
         runtime = AgentRuntime(store)
 
-        tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
+        tool = Tool[str, str](
+            "greet", "Greet someone", JSONSchema({}), lambda x: f"Hello, {x}"
+        )
 
         with pytest.raises(KeyError, match="does not exist"):
             runtime.grant_tool("nonexistent", tool)
@@ -214,7 +221,9 @@ class TestRevokeTool:
             should_act_access=frozenset(),
         )
 
-        tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
+        tool = Tool[str, str](
+            "greet", "Greet someone", JSONSchema({}), lambda x: f"Hello, {x}"
+        )
         runtime.grant_tool("agent", tool)
         runtime.revoke_tool("agent", "greet")
 
@@ -332,14 +341,14 @@ class TestRun:
         calls: list[str] = []
 
         class TrackingLLMClient:
-            message_json_schema: str = "{}"
+            message_json_schema: JSONSchema = JSONSchema({})
 
             def __init__(self, name: str):
                 self.name = name
 
             def get_response(self, context: LLMContext) -> str:
                 calls.append(self.name)
-                return '{"tool_calls": []}'
+                return "[]"
 
         store = Store()
         runtime = AgentRuntime(store)
@@ -363,14 +372,14 @@ class TestRun:
         calls: list[str] = []
 
         class TrackingLLMClient:
-            message_json_schema: str = "{}"
+            message_json_schema: JSONSchema = JSONSchema({})
 
             def __init__(self, name: str):
                 self.name = name
 
             def get_response(self, context: LLMContext) -> str:
                 calls.append(self.name)
-                return '{"tool_calls": []}'
+                return "[]"
 
         store = Store()
         runtime = AgentRuntime(store)
@@ -392,17 +401,20 @@ class TestRun:
         results: list[str] = []
 
         class ToolCallingLLMClient:
-            message_json_schema: str = "{}"
+            message_json_schema: JSONSchema = JSONSchema({})
 
             def get_response(self, context: LLMContext) -> str:
-                return '{"tool_calls": [{"tool_name": "record", "payload": {"value": "executed"}}]}'
+                return '[{"tool_name": "record", "payload": {"value": "executed"}}]'
 
         store = Store()
         runtime = AgentRuntime(store)
 
         runtime.create_agent("agent", ToolCallingLLMClient(), mock_system_prompt())
         tool = Tool(
-            "record", "Record a value", "{}", lambda p: results.append(p["value"])
+            "record",
+            "Record a value",
+            JSONSchema({}),
+            lambda p: results.append(p["value"]),
         )
         runtime.grant_tool("agent", tool)
 
@@ -441,7 +453,7 @@ class TestSecurityBoundary:
             should_act_access=frozenset(),
         )
 
-        tool = Tool("greet", "Greet someone", "{}", lambda x: f"Hello, {x}")
+        tool = Tool("greet", "Greet someone", JSONSchema({}), lambda x: f"Hello, {x}")
         runtime.grant_tool("agent", tool)
 
         state = runtime.get_agent_state("agent")

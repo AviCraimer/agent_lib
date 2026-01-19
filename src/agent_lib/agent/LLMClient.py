@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from agent_lib.context.components.LLMContext import LLMContext
+from agent_lib.util.json_utils import JSONSchema
 
 
 class LLMClient(Protocol):
@@ -17,11 +18,10 @@ class LLMClient(Protocol):
     Any class with a get_response method matching this signature satisfies the protocol.
 
     Attributes:
-        message_json_schema: JSON schema string defining the expected format for the message object.
-            Used by Agent to validate the rendered messages from LLMContext.messages.
+        message_json_schema: JSON schema defining the expected format for the message object. Used by Agent to validate the rendered messages from LLMContext.messages.
     """
 
-    message_json_schema: str
+    message_json_schema: JSONSchema
 
     def get_response(self, context: LLMContext) -> str:
         """Get a response from the LLM.

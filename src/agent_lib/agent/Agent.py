@@ -10,16 +10,16 @@ Tool execution is handled by AgentRuntime which has access to the actual handler
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 import jsonschema
 
-from agent_lib.store.state.AgentState import AgentState
 from agent_lib.agent.LLMClient import LLMClient
 from agent_lib.context.components.LLMContext import LLMContext
+from agent_lib.store.state.AgentState import AgentState
+from agent_lib.util.json_utils import json
 
 
 class ToolCall(TypedDict):
@@ -29,8 +29,7 @@ class ToolCall(TypedDict):
     payload: dict[str, Any]
 
 
-_SCHEMA_PATH = Path(__file__).parent / "tool_call_schema.json"
-TOOL_CALL_RESPONSE_SCHEMA: dict[str, Any] = json.loads(_SCHEMA_PATH.read_text())
+TOOL_CALL_RESPONSE_SCHEMA = json.load_schema(Path(__file__).parent / "tool_call_schema.json")
 
 
 class Agent:
@@ -100,7 +99,7 @@ class Agent:
         messages_json = context.messages.render()
 
         try:
-            messages = json.loads(messages_json)
+            messages_unvalidated = json.parse(messages_json)
         except json.JSONDecodeError as e:
             raise json.JSONDecodeError(
                 f"Agent '{self.name}' messages component rendered invalid JSON: {e.msg}",
@@ -108,11 +107,13 @@ class Agent:
                 e.pos,
             )
 
-        schema = json.loads(self.llm_client.message_json_schema)
-        for msg in messages:
-            jsonschema.validate(msg, schema)
+        if not isinstance(messages_unvalidated, list):
+            raise jsonschema.ValidationError("Messages must be a JSON array")
 
-        return messages  # type: ignore[return-value]
+        for msg in messages_unvalidated:
+            jsonschema.validate(msg, self.llm_client.message_json_schema)
+
+        return cast(list[dict[str, str]], messages_unvalidated)
 
     def _validate_response(self, response: str) -> list[ToolCall]:
         """Parse and validate the LLM response.
@@ -135,7 +136,7 @@ class Agent:
             KeyError: If a tool is not granted to this agent
         """
         try:
-            tool_calls: list[ToolCall] = json.loads(response)
+            tool_calls_unvalidated = json.parse(response)
         except json.JSONDecodeError as e:
             raise json.JSONDecodeError(
                 f"Agent '{self.name}' received invalid JSON response: {e.msg}",
@@ -144,7 +145,8 @@ class Agent:
             )
 
         # Validate response structure (array of tool calls)
-        jsonschema.validate(tool_calls, TOOL_CALL_RESPONSE_SCHEMA)
+        jsonschema.validate(tool_calls_unvalidated, TOOL_CALL_RESPONSE_SCHEMA)
+        tool_calls = cast(list[ToolCall], tool_calls_unvalidated)
 
         # Get current tool metadata from state
         state = self.get_state()
@@ -162,10 +164,8 @@ class Agent:
 
             # Validate payload against tool's schema
             tool_metadata = tools_by_name[tool_name]
-            if tool_metadata.json_schema:
-                payload = tool_call.get("payload", {})
-                schema = json.loads(tool_metadata.json_schema)
-                jsonschema.validate(payload, schema)
+            payload = tool_call.get("payload", {})
+            jsonschema.validate(payload, tool_metadata.json_schema)
 
         return tool_calls
 

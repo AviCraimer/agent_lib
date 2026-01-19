@@ -10,11 +10,7 @@ and executes tool calls returned by agents.
 
 from __future__ import annotations
 
-from collections.abc import Callable
-import json
 from typing import TYPE_CHECKING, Any, Literal
-
-import jsonschema
 
 from agent_lib.agent.Agent import Agent
 from agent_lib.store.state.AgentState import AgentState
@@ -24,6 +20,7 @@ from agent_lib.context.components.ChatMessages import ChatMessages, ChatMessages
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
+from agent_lib.util.json_utils import JSONSchema
 
 if TYPE_CHECKING:
     from agent_lib.store.Store import Store
@@ -220,7 +217,7 @@ class AgentRuntime:
         action_name: str,
         tool_name: str | None = None,
         description: str = "",
-        json_schema: str = "",
+        json_schema: JSONSchema = JSONSchema({}),
     ) -> Tool[Any, None]:
         """Wrap a Store action as a Tool for agents.
 
@@ -231,7 +228,7 @@ class AgentRuntime:
             action_name: Name of the action on the Store to wrap
             tool_name: Name for the tool (defaults to action_name)
             description: Human-readable description of what the tool does
-            json_schema: JSON schema string describing the payload format. If the payload is a Pydandic model this can be auto-generated with MyPayload.model_json_schema() although for LLMs it may help to add additional descriptions to the schema manually.
+            json_schema: JSON schema describing the payload format. If the payload is a Pydantic model this can be auto-generated with MyPayload.model_json_schema() although for LLMs it may help to add additional descriptions to the schema manually.
 
         Returns:
             A Tool that wraps the Store action
@@ -279,7 +276,14 @@ class AgentRuntime:
         return Tool(
             name="update_should_act",
             description="Update an agent's should_act flag. Use to signal completion or activate other agents.",
-            json_schema='{"type": "object", "properties": {"agent_name": {"type": "string"}, "should_act": {"type": "boolean"}}, "required": ["agent_name", "should_act"]}',
+            json_schema=JSONSchema({
+                "type": "object",
+                "properties": {
+                    "agent_name": {"type": "string"},
+                    "should_act": {"type": "boolean"},
+                },
+                "required": ["agent_name", "should_act"],
+            }),
             handler=handler,
         )
 

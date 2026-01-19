@@ -7,7 +7,7 @@
   "reportMissingTypeStubs": "none",
   "reportUnknownMemberType": "warning",
   "reportUnknownArgumentType": "warning",
-  "reportUnknownVariableType": "warning",
+  "reportUnknownVariableType": "none",
   "reportUnknownParameterType": "warning",
   "reportUnusedImport": "warning",
   "reportUntypedFunctionDecorator": "error",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+from pathlib import Path
 from typing import Any, Literal, Unpack
 
 import anthropic
@@ -9,6 +9,7 @@ from anthropic.types.message_create_params import MessageCreateParamsBase
 
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.environment import anthropic_api_key
+from agent_lib.util.json_utils import JSONSchema, json
 
 CLAUDE_MODELS = {
     "sonnet": "claude-sonnet-4-5",
@@ -18,22 +19,14 @@ CLAUDE_MODELS = {
 
 type ModelSize = Literal["sonnet", "haiku", "opus"]
 
-# JSON schema for a single Claude message object
-CLAUDE_MESSAGE_SCHEMA = """{
-    "type": "object",
-    "properties": {
-        "role": {"type": "string", "enum": ["user", "assistant"]},
-        "content": {"type": "string"}
-    },
-    "required": ["role", "content"]
-}"""
+CLAUDE_MESSAGE_SCHEMA = json.load_schema(Path(__file__).parent / "claude_message_schema.json")
 
 
 class ClaudeClient:
     """Claude LLM client that implements the LLMClient protocol."""
 
     config: MessageCreateParamsBase
-    message_json_schema: str = CLAUDE_MESSAGE_SCHEMA
+    message_json_schema: JSONSchema = CLAUDE_MESSAGE_SCHEMA
 
     def __init__(self, model: ModelSize = "haiku", api_key: str = anthropic_api_key):
         self.client = anthropic.Anthropic(api_key=api_key)
@@ -65,7 +58,7 @@ class ClaudeClient:
         Returns:
             List of MessageParam for Anthropic API
         """
-        messages: list[dict[str, Any]] = json.loads(messages_json)
+        messages: list[dict[str, Any]] = json.parse(messages_json)  # type: ignore[assignment]
 
         claude_messages: list[MessageParam] = [
             {

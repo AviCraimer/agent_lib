@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from agent_lib.util.json_utils import JSONSchema
+
 
 @dataclass(frozen=True)
 class ToolMetadata:
@@ -17,9 +19,9 @@ class ToolMetadata:
     Attributes:
         name: Unique identifier for this tool
         description: Human-readable description (useful for LLM tool selection)
-        json_schema: JSON schema string describing the payload format
+        json_schema: JSON schema describing the payload format
     """
 
     name: str
     description: str
-    json_schema: str
+    json_schema: JSONSchema

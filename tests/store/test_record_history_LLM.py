@@ -11,15 +11,16 @@ from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
 from agent_lib.store.Store import Store
 from agent_lib.store.actions.record_history import record_history, RecordHistoryPayload
+from agent_lib.util.json_utils import JSONSchema
 
 
 class MockLLMClient:
     """Mock LLM client for testing."""
 
-    message_json_schema: str = "{}"
+    message_json_schema: JSONSchema = JSONSchema({})
 
     def get_response(self, context: LLMContext) -> str:
-        return '{"tool_calls": []}'
+        return '[]'
 
 
 def mock_system_prompt() -> CtxComponent[NoProps]:

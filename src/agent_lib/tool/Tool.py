@@ -11,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from agent_lib.tool.ToolMetadata import ToolMetadata
+from agent_lib.util.json_utils import JSONSchema
 
 
 @dataclass
@@ -27,13 +28,13 @@ class Tool[P, R]:
     Attributes:
         name: Unique identifier for this tool
         description: Human-readable description (useful for LLM tool selection)
-        json_schema: JSON schema string describing the payload format
+        json_schema: JSON schema describing the payload format
         handler: The function that executes when the tool is invoked
     """
 
     name: str
     description: str
-    json_schema: str
+    json_schema: JSONSchema
     handler: Callable[[P], R]
 
     def __call__(self, payload: P) -> R:
