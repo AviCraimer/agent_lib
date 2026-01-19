@@ -34,7 +34,7 @@ class Tool[P, R]:
 
     name: str
     description: str
-    json_schema: JSONSchema
+    payload_json_schema: JSONSchema
     handler: Callable[[P], R]
 
     def __call__(self, payload: P) -> R:
@@ -46,5 +46,5 @@ class Tool[P, R]:
         return ToolMetadata(
             name=self.name,
             description=self.description,
-            json_schema=self.json_schema,
+            payload_json_schema=self.payload_json_schema,
         )

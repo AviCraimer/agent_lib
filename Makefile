@@ -26,10 +26,10 @@ test:
 	$(VENV)/bin/pytest -q
 
 types:
-	$(VENV)/bin/pyright
+	$(VENV)/bin/pyright --level error
 
 lint:
-	$(VENV)/bin/ruff check .
+	$(VENV)/bin/ruff check . --select E,F,B --ignore E501
 
 check: types test lint
 

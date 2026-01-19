@@ -24,4 +24,4 @@ class ToolMetadata:
 
     name: str
     description: str
-    json_schema: JSONSchema
+    payload_json_schema: JSONSchema

@@ -12,21 +12,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from agent_lib.agent.Agent import Agent
-from agent_lib.store.state.AgentState import AgentState
+from agent_lib.agent.Agent import Agent, PostProcessResponseFn
 from agent_lib.agent.LLMClient import LLMClient
-from agent_lib.tool.Tool import Tool
 from agent_lib.context.components.ChatMessages import ChatMessages, ChatMessagesProps
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
+from agent_lib.store.state.AgentState import AgentState
+from agent_lib.tool.Tool import Tool
 from agent_lib.util.json_utils import JSONSchema
 
 if TYPE_CHECKING:
     from agent_lib.store.Store import Store
 
 
-class AgentRuntime:
+class AgentRuntime[Str: Store]:
     """Manages agent lifecycle, separate from Store.
 
     AgentRuntime maintains the security boundary between agent data (in Store._state.agent_state)
@@ -54,11 +54,11 @@ class AgentRuntime:
         runtime.run()
     """
 
-    _store: Store
+    _store: Str
     _agents: dict[str, Agent]
     _tools: dict[str, dict[str, Tool[Any, Any]]]  # agent_name -> tool_name -> Tool
 
-    def __init__(self, store: Store) -> None:
+    def __init__(self, store: Str) -> None:
         """Create an AgentRuntime managing agents for the given Store.
 
         Args:
@@ -75,6 +75,7 @@ class AgentRuntime:
         system_prompt: CtxComponent[NoProps],
         messages: CtxComponent[NoProps] | None = None,
         state_class: type[AgentState] = AgentState,
+        post_process_response: PostProcessResponseFn | None = None,
         should_act_access: frozenset[str] | Literal["all"] = frozenset(),
         **state_kwargs: Any,
     ) -> Agent:
@@ -86,6 +87,7 @@ class AgentRuntime:
             system_prompt: The system prompt component for building context
             messages: Optional custom messages component. If not provided, uses ChatMessages connected to the agent's history in state.
             state_class: AgentState subclass to use (default: AgentState)
+            post_process_response: Optional callback to transform LLM response before validation. Use this to wrap raw text responses as tool calls.
             should_act_access: Controls which agents this agent can update should_act for.
                 "all" allows updating any agent, a frozenset restricts to named agents.
                 Default is empty frozenset (no should_act tool granted).
@@ -125,7 +127,11 @@ class AgentRuntime:
 
         # Create Agent instance (held here, not in Store)
         agent = Agent(
-            name=name, llm_client=llm_client, context=context, get_state=get_state
+            name=name,
+            llm_client=llm_client,
+            context=context,
+            get_state=get_state,
+            post_process_response=post_process_response,
         )
         self._agents[name] = agent
 
@@ -246,7 +252,10 @@ class AgentRuntime:
             bound_action(payload)
 
         return Tool(
-            name=name, description=description, json_schema=json_schema, handler=handler
+            name=name,
+            description=description,
+            payload_json_schema=json_schema,
+            handler=handler,
         )
 
     def make_should_act_tool(
@@ -276,14 +285,16 @@ class AgentRuntime:
         return Tool(
             name="update_should_act",
             description="Update an agent's should_act flag. Use to signal completion or activate other agents.",
-            json_schema=JSONSchema({
-                "type": "object",
-                "properties": {
-                    "agent_name": {"type": "string"},
-                    "should_act": {"type": "boolean"},
-                },
-                "required": ["agent_name", "should_act"],
-            }),
+            payload_json_schema=JSONSchema(
+                {
+                    "type": "object",
+                    "properties": {
+                        "agent_name": {"type": "string"},
+                        "should_act": {"type": "boolean"},
+                    },
+                    "required": ["agent_name", "should_act"],
+                }
+            ),
             handler=handler,
         )
 

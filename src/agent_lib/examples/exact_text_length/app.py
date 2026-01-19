@@ -1,13 +1,14 @@
+from agent_lib.agent.response_helpers import reponse_as_single_tool_call
 from agent_lib.agent_app.AgentRuntime import AgentRuntime
 from agent_lib.examples.exact_text_length.store import ExactLengthStore
-from agent_lib.examples.exact_text_length.writer_agent import (
+from agent_lib.examples.exact_text_length.writer_context import (
     WriterComponent,
     map_store_to_writer,
-    WriterLlmClient,
 )
+from agent_lib.llm_integrations.anthropic.claude_client import ClaudeClient
 
 
-class ExactLengthApp(AgentRuntime):
+class ExactLengthApp(AgentRuntime[ExactLengthStore]):
 
     def __init__(self, user_prompt: str, target_wordcount: int):
         store = ExactLengthStore(user_prompt, target_wordcount)
@@ -17,7 +18,10 @@ class ExactLengthApp(AgentRuntime):
         WriterContext = store.connect(WriterComponent, map_store_to_writer)
 
         self.create_agent(
-            name="writer", llm_client=WriterLlmClient(), system_prompt=WriterContext
+            name="writer",
+            llm_client=ClaudeClient("opus"),
+            system_prompt=WriterContext,
+            post_process_response=reponse_as_single_tool_call("update_text"),
         )
         update_text = self.action_to_tool("update_text", "update_text")
 
@@ -50,9 +54,10 @@ class ExactLengthApp(AgentRuntime):
             print(f"Terminated after {count} attempts")
 
 
-exact_length = ExactLengthApp(
-    "Write three paragraphs on the question of how we could know if AI systems are conscious.",
-    400,
-)
+if __name__ == "__main__":
+    exact_length = ExactLengthApp(
+        "Write three paragraphs on the question of how we could know if AI systems are conscious.",
+        400,
+    )
 
-exact_length.run()
+    exact_length.run()
