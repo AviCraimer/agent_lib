@@ -2,13 +2,8 @@ from dataclasses import dataclass
 import json
 from agent_lib.agent.Agent import ToolCall
 from agent_lib.agent.LLMClient import LLMClient
-from agent_lib.context.CtxComponent import (
-    CtxComponent,
-    PromptTag,
-    SystemTag,
-    Tag,
-    TagProps,
-)
+from agent_lib.context.CtxComponent import CtxComponent
+from agent_lib.context.components.Tag import Tag, TagProps, PromptTag, SystemTag
 
 from agent_lib.context.Props import Props, propsclass
 from agent_lib.context.components.LLMContext import LLMContext

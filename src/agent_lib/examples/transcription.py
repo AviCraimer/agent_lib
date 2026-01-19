@@ -1,8 +1,5 @@
-from agent_lib.context.CtxComponent import (
-    CtxComponent,
-    Tag,
-    TagProps,
-)
+from agent_lib.context.CtxComponent import CtxComponent
+from agent_lib.context.components.Tag import Tag, TagProps
 from agent_lib.context.Props import Props, propsclass
 
 
