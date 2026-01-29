@@ -1,12 +1,12 @@
-"""AgentRuntime - manages agent lifecycle, separate from Store.
+"""AgentApp - manages agent lifecycle, separate from Store.
 
-AgentRuntime holds Agent instances outside of Store, maintaining the security boundary
-that prevents actions from accessing Agent behavior directly. It also holds tool handlers
-and executes tool calls returned by agents.
+AgentApp holds Agent instances outside of Store, maintaining the security boundary
+that prevents StoreUpdaters from accessing Agent behavior directly. It also holds tool
+handlers and executes tool calls returned by agents.
 """
 
 # pyright: reportPrivateUsage=false
-# AgentRuntime needs access to Store internals (_state, _actions) to manage agent lifecycle.
+# AgentApp needs access to Store internals (_state) to manage agent lifecycle.
 
 from __future__ import annotations
 
@@ -19,54 +19,68 @@ from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
 from agent_lib.store.state.AgentState import AgentState
+from agent_lib.store.Subscribers import Subscribers
+from agent_lib.store.updaters.update_should_act import (
+    UpdateShouldActPayload,
+    update_should_act,
+)
 from agent_lib.tool.Tool import Tool
-from agent_lib.util.json_utils import JSONSchema
 
 if TYPE_CHECKING:
     from agent_lib.store.Store import Store
+    from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
 
 
-class AgentRuntime[Str: Store]:
+class AgentApp[Str: Store]:
     """Manages agent lifecycle, separate from Store.
 
-    AgentRuntime maintains the security boundary between agent data (in Store._state.agent_state)
-    and agent behavior (Agent instances held here). Actions receive the Store but cannot
-    access AgentRuntime or Agent instances.
+    AgentApp maintains the security boundary between agent data (in Store._state.agent_state)
+    and agent behavior (Agent instances held here). StoreUpdaters receive the Store but cannot
+    access AgentApp or Agent instances.
 
-    Tool handlers are stored in the runtime while tool metadata lives in agent state.
-    When an agent returns tool calls from step(), the runtime executes them using the stored handlers.
+    Tool handlers are stored in the app while tool metadata lives in agent state.
+    When an agent returns tool calls from step(), the app executes them using the stored handlers.
+
+    Subscribers are managed by AgentApp (moved from Store) to keep Store focused on state.
 
     Usage:
         store = MyStore()
-        runtime = AgentRuntime(store)
+        app = AgentApp(store)
 
         # Create an agent - adds state to Store and creates Agent instance
-        planner = runtime.create_agent("planner", llm_client, system_prompt)
+        planner = app.create_agent("planner", llm_client, system_prompt)
 
-        # Grant tools to the agent (metadata goes to state, handler stays in runtime)
-        runtime.grant_tool("planner", some_tool)
+        # Grant tools to the agent (metadata goes to state, handler stays in app)
+        app.grant_tool("planner", some_tool)
 
-        # Wrap a Store action as a tool and grant it
-        set_value_tool = runtime.action_to_tool("set_value")
-        runtime.grant_tool("planner", set_value_tool)
+        # Create a StoreUpdater and grant it
+        @store_updater
+        def set_value(store: MyStore, value: str) -> frozenset[str]:
+            store._state.value = value
+            return frozenset({"_state.value"})
+
+        set_value.bind(app)
+        app.grant_tool("planner", set_value)
 
         # Run the agent loop
-        runtime.run()
+        app.run()
     """
 
     _store: Str
     _agents: dict[str, Agent]
-    _tools: dict[str, dict[str, Tool[Any, Any]]]  # agent_name -> tool_name -> Tool
+    _tools: dict[str, dict[str, Any]]  # agent_name -> tool_name -> Tool|StoreUpdater
+    subscribers: Subscribers
 
     def __init__(self, store: Str) -> None:
-        """Create an AgentRuntime managing agents for the given Store.
+        """Create an AgentApp managing agents for the given Store.
 
         Args:
-            store: The Store whose agent_state this runtime manages
+            store: The Store whose agent_state this app manages
         """
         self._store = store
         self._agents = {}
         self._tools = {}
+        self.subscribers = Subscribers()
 
     def create_agent(
         self,
@@ -104,7 +118,7 @@ class AgentRuntime[Str: Store]:
 
         # Create state and add to Store
         state = state_class(agent_name=name, **state_kwargs)
-        self._store._state.agent_state[name] = state
+        self._store.state.agent_state[name] = state
 
         # Initialize tool storage for this agent
         self._tools[name] = {}
@@ -114,7 +128,7 @@ class AgentRuntime[Str: Store]:
             messages = self._store.connect(
                 ChatMessages,
                 lambda s, n=name: ChatMessagesProps(
-                    history=s._state.agent_state[n].history
+                    history=s.state.agent_state[n].history
                 ),
             )
 
@@ -123,7 +137,7 @@ class AgentRuntime[Str: Store]:
 
         # Create state selector for read-only access
         def get_state(agent_name: str = name) -> AgentState:
-            return self._store._state.agent_state[agent_name]
+            return self._store.state.agent_state[agent_name]
 
         # Create Agent instance (held here, not in Store)
         agent = Agent(
@@ -142,10 +156,13 @@ class AgentRuntime[Str: Store]:
 
         return agent
 
-    def grant_tool(self, agent_name: str, tool: Tool[Any, Any]) -> None:
+    def grant_tool(
+        self, agent_name: str, tool: Tool[Any, Any] | StoreUpdaterBase[Any, Any]
+    ) -> None:
         """Grant a tool to an agent.
 
-        Adds tool metadata to agent's state and stores the handler in the runtime.
+        Adds tool metadata to agent's state and stores the handler in the app.
+        If the tool is a StoreUpdaterBase, it will be automatically bound to this app.
 
         Args:
             agent_name: Name of the agent to grant the tool to
@@ -157,18 +174,24 @@ class AgentRuntime[Str: Store]:
         if agent_name not in self._agents:
             raise KeyError(f"Agent '{agent_name}' does not exist")
 
+        # Auto-bind StoreUpdaters - import here to avoid circular import
+        from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
+
+        if isinstance(tool, StoreUpdaterBase):
+            tool.bind(self)
+
         # Add metadata to agent state
         metadata = tool.to_metadata()
-        state = self._store._state.agent_state[agent_name]
+        state = self._store.state.agent_state[agent_name]
         state.tools.append(metadata)
 
-        # Store handler in runtime
+        # Store handler in app
         self._tools[agent_name][tool.name] = tool
 
     def revoke_tool(self, agent_name: str, tool_name: str) -> None:
         """Revoke a tool from an agent.
 
-        Removes tool metadata from agent's state and removes the handler from the runtime.
+        Removes tool metadata from agent's state and removes the handler from the app.
 
         Args:
             agent_name: Name of the agent to revoke the tool from
@@ -184,10 +207,10 @@ class AgentRuntime[Str: Store]:
             raise KeyError(f"Tool '{tool_name}' is not granted to agent '{agent_name}'")
 
         # Remove metadata from agent state
-        state = self._store._state.agent_state[agent_name]
+        state = self._store.state.agent_state[agent_name]
         state.tools = [t for t in state.tools if t.name != tool_name]
 
-        # Remove handler from runtime
+        # Remove handler from app
         del self._tools[agent_name][tool_name]
 
     def get_agent(self, name: str) -> Agent | None:
@@ -196,7 +219,7 @@ class AgentRuntime[Str: Store]:
 
     def get_agent_state(self, name: str) -> AgentState | None:
         """Get an agent's state from the Store, or None if not found."""
-        return self._store._state.agent_state.get(name)
+        return self._store.state.agent_state.get(name)
 
     def remove_agent(self, name: str) -> None:
         """Remove an agent, deleting its state from the Store.
@@ -212,90 +235,46 @@ class AgentRuntime[Str: Store]:
 
         del self._agents[name]
         del self._tools[name]
-        del self._store._state.agent_state[name]
+        del self._store.state.agent_state[name]
 
     def list_agents(self) -> list[str]:
         """List the names of all agents."""
         return list(self._agents.keys())
 
-    def action_to_tool(
-        self,
-        action_name: str,
-        tool_name: str | None = None,
-        description: str = "",
-        json_schema: JSONSchema = JSONSchema({}),
-    ) -> Tool[Any, None]:
-        """Wrap a Store action as a Tool for agents.
-
-        The returned Tool invokes the Store action when called, but the agent
-        never sees the Store directly - only the payload goes in and the action runs.
-
-        Args:
-            action_name: Name of the action on the Store to wrap
-            tool_name: Name for the tool (defaults to action_name)
-            description: Human-readable description of what the tool does
-            json_schema: JSON schema describing the payload format. If the payload is a Pydantic model this can be auto-generated with MyPayload.model_json_schema() although for LLMs it may help to add additional descriptions to the schema manually.
-
-        Returns:
-            A Tool that wraps the Store action
-
-        Raises:
-            KeyError: If the action doesn't exist on the Store
-        """
-        if action_name not in self._store._actions:
-            raise KeyError(f"Action '{action_name}' does not exist on Store")
-
-        bound_action = self._store._actions[action_name]
-        name = tool_name or action_name
-
-        def handler(payload: Any) -> None:
-            bound_action(payload)
-
-        return Tool(
-            name=name,
-            description=description,
-            payload_json_schema=json_schema,
-            handler=handler,
-        )
-
     def make_should_act_tool(
         self,
         allowed_agents: frozenset[str] | Literal["all"],
-    ) -> Tool[dict[str, Any], None]:
+    ) -> StoreUpdaterBase[UpdateShouldActPayload, Store]:
         """Create a should_act tool with constrained agent access.
+
+        Returns a copy of the update_should_act StoreUpdater that validates
+        agent_name against the allowed_agents list.
 
         Args:
             allowed_agents: Either "all" to allow updating any agent,
                 or a frozenset of agent names that can be updated.
 
         Returns:
-            A Tool that validates agent_name against allowed_agents before
-            calling update_should_act action.
+            A StoreUpdater that validates agent_name against allowed_agents before
+            calling the underlying update_should_act updater.
         """
+        from agent_lib.store.StoreUpdater import StoreUpdater
 
-        def handler(payload: dict[str, Any]) -> None:
+        def validated_handler(
+            store: Store, payload: UpdateShouldActPayload
+        ) -> frozenset[str]:
             agent_name = payload["agent_name"]
             if allowed_agents != "all" and agent_name not in allowed_agents:
                 raise ValueError(
                     f"Agent '{agent_name}' is not in allowed agents: {allowed_agents}"
                 )
-            # Cast to UpdateShouldActPayload - validation happens via JSON schema
-            self._store.update_should_act(payload)  # type: ignore[arg-type]
+            return update_should_act.updater(store, payload)
 
-        return Tool(
-            name="update_should_act",
-            description="Update an agent's should_act flag. Use to signal completion or activate other agents.",
-            payload_json_schema=JSONSchema(
-                {
-                    "type": "object",
-                    "properties": {
-                        "agent_name": {"type": "string"},
-                        "should_act": {"type": "boolean"},
-                    },
-                    "required": ["agent_name", "should_act"],
-                }
-            ),
-            handler=handler,
+        return StoreUpdater(
+            name=update_should_act.name,
+            description=update_should_act.description,
+            payload_json_schema=update_should_act.payload_json_schema,
+            updater=validated_handler,
         )
 
     def run_once(self) -> None:

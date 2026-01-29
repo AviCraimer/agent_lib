@@ -1,8 +1,11 @@
-"""Tests for AsyncAction instance pattern with Store.
+"""Tests for StoreUpdaterAsync pattern.
 
-Tests the pattern of creating AsyncAction instances separately and attaching
-them as class attributes to Store subclasses, using Protocols for type safety.
+Tests the pattern of creating StoreUpdaterAsync instances and binding them
+to an AgentApp, using Protocols for type safety.
 """
+
+# pyright: reportPrivateUsage=false
+# Tests need access to _store for verification.
 
 from __future__ import annotations
 
@@ -13,8 +16,10 @@ from typing import Any, Protocol
 
 import pytest
 
-from agent_lib.store.AsyncAction import AsyncAction
+from agent_lib.agent_app.AgentApp import AgentApp
 from agent_lib.store.Store import Store
+from agent_lib.store.StoreUpdaterAsync import StoreUpdaterAsync
+from agent_lib.util.json_utils import JSONSchema
 
 
 # =============================================================================
@@ -36,7 +41,7 @@ class HasApiData(Protocol):
 
 @dataclass(frozen=True)
 class FetchPayload:
-    """Payload for fetch_data action."""
+    """Payload for fetch_data updater."""
 
     api_endpoint: str
     data_result_key: str
@@ -59,7 +64,7 @@ class FetchError(Exception):
 
 
 # =============================================================================
-# AsyncAction Definition
+# StoreUpdaterAsync Definition
 # =============================================================================
 
 
@@ -109,15 +114,18 @@ def _fetch_on_error(store: HasApiData, error: Exception) -> frozenset[str]:
         return frozenset({"data._error"})
 
 
-fetch_data_action = AsyncAction[HasApiData, FetchPayload, FetchResult](
-    handler=_fetch_handler,
+fetch_data_updater: StoreUpdaterAsync[FetchPayload, FetchResult, Any] = StoreUpdaterAsync(
+    name="fetch_data",
+    description="Fetch data from an API endpoint.",
+    payload_json_schema=JSONSchema({}),
+    async_handler=_fetch_handler,
     on_success=_fetch_on_success,
     on_error=_fetch_on_error,
 )
 
 
 # =============================================================================
-# Store Subclass
+# Store and App Subclass
 # =============================================================================
 
 
@@ -127,12 +135,19 @@ class ApiDataStore(Store, HasApiData):
     api_key: str
     data: dict[str, Any]
 
-    fetch_data = fetch_data_action
-
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
         self.data = {}
         super().__init__()
+
+
+class ApiDataApp(AgentApp[ApiDataStore]):
+    """App with fetch_data capability bound."""
+
+    def __init__(self, api_key: str) -> None:
+        store = ApiDataStore(api_key)
+        super().__init__(store)
+        fetch_data_updater.bind(self)
 
 
 # =============================================================================
@@ -140,16 +155,17 @@ class ApiDataStore(Store, HasApiData):
 # =============================================================================
 
 
-class TestAsyncActionInstanceSuccess:
-    """Tests for successful async action execution using instance pattern."""
+class TestStoreUpdaterAsyncSuccess:
+    """Tests for successful async updater execution."""
 
     @pytest.mark.asyncio
     async def test_fetch_success_stores_data(self) -> None:
         """Successful fetch stores data correctly."""
-        store = ApiDataStore(api_key="secret-key-123")
+        app = ApiDataApp(api_key="secret-key-123")
+        store = app._store
 
         payload = FetchPayload(api_endpoint="success.com", data_result_key="user_info")
-        await store.fetch_data(payload)
+        await fetch_data_updater(payload)
 
         assert "user_info" in store.data
         assert store.data["user_info"]["message"] == "Data fetched successfully!"
@@ -158,27 +174,28 @@ class TestAsyncActionInstanceSuccess:
     @pytest.mark.asyncio
     async def test_fetch_success_notifies_subscribers(self) -> None:
         """Successful fetch notifies subscribers with affects function."""
-        store = ApiDataStore(api_key="secret-key-123")
+        app = ApiDataApp(api_key="secret-key-123")
         affected_paths: list[bool] = []
-        store.subscribe(lambda affects: affected_paths.append(affects("data.user_info")))
+        app.subscribers.append(lambda affects: affected_paths.append(affects("data.user_info")))
 
         payload = FetchPayload(api_endpoint="success.com", data_result_key="user_info")
-        await store.fetch_data(payload)
+        await fetch_data_updater(payload)
 
         assert len(affected_paths) == 1
         assert affected_paths[0] is True  # data.user_info was affected
 
 
-class TestAsyncActionInstanceError:
-    """Tests for error handling in async actions using instance pattern."""
+class TestStoreUpdaterAsyncError:
+    """Tests for error handling in async updaters."""
 
     @pytest.mark.asyncio
     async def test_fetch_failure_stores_error(self) -> None:
         """Failed fetch stores error info via on_error callback."""
-        store = ApiDataStore(api_key="secret-key-456")
+        app = ApiDataApp(api_key="secret-key-456")
+        store = app._store
 
         payload = FetchPayload(api_endpoint="fail.com", data_result_key="weather")
-        await store.fetch_data(payload)
+        await fetch_data_updater(payload)
 
         assert "weather" in store.data
         assert store.data["weather"]["error"] is True
@@ -187,35 +204,36 @@ class TestAsyncActionInstanceError:
     @pytest.mark.asyncio
     async def test_fetch_failure_notifies_subscribers(self) -> None:
         """Failed fetch notifies subscribers with affects function."""
-        store = ApiDataStore(api_key="secret-key-456")
+        app = ApiDataApp(api_key="secret-key-456")
         affected_paths: list[bool] = []
-        store.subscribe(lambda affects: affected_paths.append(affects("data.weather")))
+        app.subscribers.append(lambda affects: affected_paths.append(affects("data.weather")))
 
         payload = FetchPayload(api_endpoint="fail.com", data_result_key="weather")
-        await store.fetch_data(payload)
+        await fetch_data_updater(payload)
 
         assert len(affected_paths) == 1
         assert affected_paths[0] is True  # data.weather was affected
 
 
-class TestAsyncActionInstanceMultiple:
-    """Tests for multiple async action invocations."""
+class TestStoreUpdaterAsyncMultiple:
+    """Tests for multiple async updater invocations."""
 
     @pytest.mark.asyncio
     async def test_multiple_fetches_to_different_keys(self) -> None:
         """Multiple fetches store data under separate keys."""
-        store = ApiDataStore(api_key="multi-key")
+        app = ApiDataApp(api_key="multi-key")
+        store = app._store
         notification_count = 0
 
         def on_change(_: Callable[[str], bool]) -> None:
             nonlocal notification_count
             notification_count += 1
 
-        store.subscribe(on_change)
+        app.subscribers.append(on_change)
 
-        await store.fetch_data(FetchPayload("success.com", "data1"))
-        await store.fetch_data(FetchPayload("error.com", "data2"))
-        await store.fetch_data(FetchPayload("success.com", "data3"))
+        await fetch_data_updater(FetchPayload("success.com", "data1"))
+        await fetch_data_updater(FetchPayload("error.com", "data2"))
+        await fetch_data_updater(FetchPayload("success.com", "data3"))
 
         assert "data1" in store.data and store.data["data1"].get("error") is None
         assert "data2" in store.data and store.data["data2"]["error"] is True
@@ -223,8 +241,8 @@ class TestAsyncActionInstanceMultiple:
         assert notification_count == 3
 
 
-class TestAsyncActionErrorPropagation:
-    """Tests for async action error handling edge cases."""
+class TestStoreUpdaterAsyncErrorPropagation:
+    """Tests for async updater error handling edge cases."""
 
     @pytest.mark.asyncio
     async def test_error_propagates_without_on_error(self) -> None:
@@ -237,15 +255,17 @@ class TestAsyncActionErrorPropagation:
             store.data["result"] = result
             return frozenset({"data.result"})
 
-        failing_action = AsyncAction[HasApiData, str, str](
-            handler=failing_handler,
+        failing_updater: StoreUpdaterAsync[str, str, Any] = StoreUpdaterAsync(
+            name="do_fail",
+            description="Always fails.",
+            payload_json_schema=JSONSchema({}),
+            async_handler=failing_handler,
             on_success=on_success,
         )
 
         class FailingStore(Store, HasApiData):
             api_key: str
             data: dict[str, Any]
-            do_fail = failing_action
 
             def __init__(self) -> None:
                 self.api_key = ""
@@ -253,15 +273,17 @@ class TestAsyncActionErrorPropagation:
                 super().__init__()
 
         store = FailingStore()
+        app: AgentApp[FailingStore] = AgentApp(store)
+        failing_updater.bind(app)
 
         with pytest.raises(ValueError, match="network failure"):
-            await store.do_fail("test")
+            await failing_updater("test")
 
     @pytest.mark.asyncio
-    async def test_async_action_returns_none(self) -> None:
-        """Bound async action returns None, not the handler result."""
-        store = ApiDataStore(api_key="test")
+    async def test_async_updater_returns_none(self) -> None:
+        """Bound async updater returns None, not the handler result."""
+        _app = ApiDataApp(api_key="test")  # Creates and binds updater
 
-        result = await store.fetch_data(FetchPayload("success.com", "test"))
+        result = await fetch_data_updater(FetchPayload("success.com", "test"))
 
         assert result is None

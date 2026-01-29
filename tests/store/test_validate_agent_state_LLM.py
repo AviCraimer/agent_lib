@@ -37,7 +37,7 @@ class TestValidateAgentStateSuccess:
 
         class AppStore(Store):
             def __init__(self) -> None:
-                self._state = State(
+                self.state = State(
                     agent_state={
                         "planner": PlannerState(agent_name="planner"),
                     }
@@ -45,14 +45,14 @@ class TestValidateAgentStateSuccess:
                 super().__init__()
 
         store = AppStore()
-        assert store._state.agent_state["planner"].agent_name == "planner"
+        assert store.state.agent_state["planner"].agent_name == "planner"
 
     def test_valid_multiple_agents(self) -> None:
         """Multiple agents with matching keys and agent_names pass."""
 
         class AppStore(Store):
             def __init__(self) -> None:
-                self._state = State(
+                self.state = State(
                     agent_state={
                         "planner": PlannerState(agent_name="planner"),
                         "executor": ExecutorState(agent_name="executor"),
@@ -61,7 +61,7 @@ class TestValidateAgentStateSuccess:
                 super().__init__()
 
         store = AppStore()
-        assert len(store._state.agent_state) == 2
+        assert len(store.state.agent_state) == 2
 
     def test_no_agent_state(self) -> None:
         """Store with empty agent_state passes (no-op)."""
@@ -75,7 +75,7 @@ class TestValidateAgentStateSuccess:
 
         store = SimpleStore()
         assert store.value == 0
-        assert store._state.agent_state == {}
+        assert store.state.agent_state == {}
 
 
 class TestValidateAgentStateMismatch:
@@ -86,7 +86,7 @@ class TestValidateAgentStateMismatch:
 
         class AppStore(Store):
             def __init__(self) -> None:
-                self._state = State(
+                self.state = State(
                     agent_state={
                         "wrong_key": PlannerState(agent_name="planner"),
                     }
@@ -101,7 +101,7 @@ class TestValidateAgentStateMismatch:
 
         class AppStore(Store):
             def __init__(self) -> None:
-                self._state = State(
+                self.state = State(
                     agent_state={
                         "planner": PlannerState(agent_name="planner"),
                         "wrong": ExecutorState(agent_name="executor"),
@@ -121,7 +121,7 @@ class TestValidateAgentStateTypeErrors:
 
         class AppStore(Store):
             def __init__(self) -> None:
-                self._state = State(
+                self.state = State(
                     agent_state={
                         "planner": {"not": "an agent"},  # type: ignore[dict-item]
                     }
@@ -136,8 +136,8 @@ class TestValidateAgentStateTypeErrors:
 
         class AppStore(Store):
             def __init__(self) -> None:
-                self._state = State()
-                self._state.agent_state = [PlannerState(agent_name="planner")]  # type: ignore[assignment]
+                self.state = State()
+                self.state.agent_state = [PlannerState(agent_name="planner")]  # type: ignore[assignment]
                 super().__init__()
 
         with pytest.raises(TypeError, match="must be a dict"):

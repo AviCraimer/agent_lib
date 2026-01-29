@@ -1,4 +1,7 @@
-# A simple example of how to make a reusable Async Action and attach it to a store.
+# A simple example of how to make a reusable StoreUpdaterAsync and attach it to an app.
+
+# pyright: reportPrivateUsage=false
+# Example code needs access to _store for testing/demonstration.
 
 from __future__ import annotations
 
@@ -8,8 +11,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from agent_lib.store.AsyncAction import AsyncAction
+from agent_lib.agent_app.AgentApp import AgentApp
 from agent_lib.store.Store import Store
+from agent_lib.store.StoreUpdaterAsync import StoreUpdaterAsync
+from agent_lib.util.json_utils import JSONSchema
 
 
 # =============================================================================
@@ -31,7 +36,7 @@ class HasApiData(Protocol):
 
 @dataclass(frozen=True)
 class FetchPayload:
-    """Payload for fetch_data action."""
+    """Payload for fetch_data updater."""
 
     api_endpoint: str
     data_result_key: str
@@ -54,7 +59,7 @@ class FetchError(Exception):
 
 
 # =============================================================================
-# AsyncAction Definition
+# StoreUpdaterAsync Definition
 # =============================================================================
 
 
@@ -107,16 +112,28 @@ def _fetch_on_error(store: HasApiData, error: Exception) -> frozenset[str]:
         return frozenset({"data._error"})
 
 
-# Create the AsyncAction instance
-fetch_data_action = AsyncAction[HasApiData, FetchPayload, FetchResult](
-    handler=_fetch_handler,
+# Create the StoreUpdaterAsync instance
+fetch_data_updater: StoreUpdaterAsync[FetchPayload, FetchResult, Any] = StoreUpdaterAsync(
+    name="fetch_data",
+    description="Fetch data from an API endpoint.",
+    payload_json_schema=JSONSchema(
+        {
+            "type": "object",
+            "properties": {
+                "api_endpoint": {"type": "string"},
+                "data_result_key": {"type": "string"},
+            },
+            "required": ["api_endpoint", "data_result_key"],
+        }
+    ),
+    async_handler=_fetch_handler,
     on_success=_fetch_on_success,
     on_error=_fetch_on_error,
 )
 
 
 # =============================================================================
-# Store Subclass (inherits from Store and satisfies HasApiData protocol)
+# Store and App Subclasses
 # =============================================================================
 
 
@@ -126,13 +143,20 @@ class ApiDataStore(Store, HasApiData):
     api_key: str
     data: dict[str, Any]
 
-    # Attach the async action as a class attribute
-    fetch_data = fetch_data_action
-
     def __init__(self, api_key: str) -> None:
         self.api_key = api_key
         self.data = {}
         super().__init__()
+
+
+class ApiDataApp(AgentApp[ApiDataStore]):
+    """App that provides the fetch_data capability."""
+
+    def __init__(self, api_key: str) -> None:
+        store = ApiDataStore(api_key)
+        super().__init__(store)
+        # Bind the async updater
+        fetch_data_updater.bind(self)
 
 
 # =============================================================================
@@ -144,15 +168,16 @@ async def test_fetch_success() -> None:
     """Test that fetch_data succeeds and stores data correctly."""
     print("\n=== Test: Fetch Success ===")
 
-    store = ApiDataStore(api_key="secret-key-123")
+    app = ApiDataApp(api_key="secret-key-123")
+    store = app._store
 
     # Track notifications
     affected_paths: list[bool] = []
-    store.subscribe(lambda affects: affected_paths.append(affects("data.user_info")))
+    app.subscribers.append(lambda affects: affected_paths.append(affects("data.user_info")))
 
-    # Dispatch the async action
+    # Dispatch the async updater
     payload = FetchPayload(api_endpoint="success.com", data_result_key="user_info")
-    await store.fetch_data(payload)
+    await fetch_data_updater(payload)
 
     # Verify state was updated
     assert "user_info" in store.data, "user_info should be in data"
@@ -164,22 +189,23 @@ async def test_fetch_success() -> None:
     print(f"  data.user_info affected: {affected_paths[0]}")
 
     print(f"  Store data: {store.data}")
-    print("  ✓ Test passed!")
+    print("  Test passed!")
 
 
 async def test_fetch_failure() -> None:
     """Test that fetch_data handles errors and stores error info."""
     print("\n=== Test: Fetch Failure ===")
 
-    store = ApiDataStore(api_key="secret-key-456")
+    app = ApiDataApp(api_key="secret-key-456")
+    store = app._store
 
     # Track notifications
     affected_paths: list[bool] = []
-    store.subscribe(lambda affects: affected_paths.append(affects("data.weather")))
+    app.subscribers.append(lambda affects: affected_paths.append(affects("data.weather")))
 
-    # Dispatch the async action with a failing endpoint
+    # Dispatch the async updater with a failing endpoint
     payload = FetchPayload(api_endpoint="fail.com", data_result_key="weather")
-    await store.fetch_data(payload)
+    await fetch_data_updater(payload)
 
     # Verify error state was stored
     assert "weather" in store.data, "weather should be in data"
@@ -191,14 +217,15 @@ async def test_fetch_failure() -> None:
     print(f"  data.weather affected: {affected_paths[0]}")
 
     print(f"  Store data: {store.data}")
-    print("  ✓ Test passed!")
+    print("  Test passed!")
 
 
 async def test_multiple_fetches() -> None:
     """Test multiple fetches to different keys."""
     print("\n=== Test: Multiple Fetches ===")
 
-    store = ApiDataStore(api_key="multi-key")
+    app = ApiDataApp(api_key="multi-key")
+    store = app._store
 
     notification_count = 0
 
@@ -207,16 +234,16 @@ async def test_multiple_fetches() -> None:
         notification_count += 1
         print(f"    Notification #{notification_count}: data affected = {affects('data')}")
 
-    store.subscribe(on_change)
+    app.subscribers.append(on_change)
 
     # Successful fetch
-    await store.fetch_data(FetchPayload("success.com", "data1"))
+    await fetch_data_updater(FetchPayload("success.com", "data1"))
 
     # Failed fetch
-    await store.fetch_data(FetchPayload("error.com", "data2"))
+    await fetch_data_updater(FetchPayload("error.com", "data2"))
 
     # Another successful fetch
-    await store.fetch_data(FetchPayload("success.com", "data3"))
+    await fetch_data_updater(FetchPayload("success.com", "data3"))
 
     # Verify all data is present
     assert "data1" in store.data and store.data["data1"].get("error") is None
@@ -231,57 +258,21 @@ async def test_multiple_fetches() -> None:
     print(f"  data1 (success): {store.data['data1']}")
     print(f"  data2 (error): {store.data['data2']}")
     print(f"  data3 (success): {store.data['data3']}")
-    print("  ✓ Test passed!")
-
-
-async def test_unsubscribe() -> None:
-    """Test that unsubscribe works correctly."""
-    print("\n=== Test: Unsubscribe ===")
-
-    store = ApiDataStore(api_key="unsub-key")
-
-    notification_count = 0
-
-    def on_change(_: Callable[[str], bool]) -> None:
-        nonlocal notification_count
-        notification_count += 1
-
-    unsubscribe = store.subscribe(on_change)
-
-    # First fetch - should notify
-    await store.fetch_data(FetchPayload("success.com", "before_unsub"))
-    assert notification_count == 1
-
-    # Unsubscribe
-    unsubscribe()
-
-    # Second fetch - should NOT notify
-    await store.fetch_data(FetchPayload("success.com", "after_unsub"))
-    assert (
-        notification_count == 1
-    ), "Should not have received notification after unsubscribe"
-
-    # Verify both fetches still updated the store
-    assert "before_unsub" in store.data
-    assert "after_unsub" in store.data
-
-    print(f"  Notifications received: {notification_count} (expected 1)")
-    print("  ✓ Test passed!")
+    print("  Test passed!")
 
 
 async def main() -> None:
     """Run all tests."""
     print("=" * 70)
-    print("AsyncAction Store Example - Running Tests")
+    print("StoreUpdaterAsync Example - Running Tests")
     print("=" * 70)
 
     await test_fetch_success()
     await test_fetch_failure()
     await test_multiple_fetches()
-    await test_unsubscribe()
 
     print("\n" + "=" * 70)
-    print("All tests passed! ✓")
+    print("All tests passed!")
     print("=" * 70)
 
 

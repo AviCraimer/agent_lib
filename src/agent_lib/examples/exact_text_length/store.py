@@ -1,9 +1,14 @@
-from collections.abc import Callable
+"""Store for the exact text length example.
+
+This store manages state for an agent that writes text to hit an exact word count.
+"""
+
 from dataclasses import dataclass
-from typing import Self
 
 from agent_lib.store.state.State import State
 from agent_lib.store.Store import Store
+from agent_lib.store.StoreUpdater import store_updater
+from agent_lib.util.json_utils import JSONSchema
 
 
 @dataclass
@@ -29,29 +34,35 @@ class ExactLengthStore(Store[ExactLengthState]):
         )
         super().__init__()
 
-        # Subscribe to trigger update_wordcount when current_text changes
-        self.subscribe(self._on_text_change)
 
-    def _on_text_change(self, affects: Callable[[str], bool]) -> None:
-        if affects("current_text"):
-            self.update_wordcount(None)
+# Define Store Updaters for this app
+@store_updater
+def update_text(store: ExactLengthStore, new_text: str) -> frozenset[str]:
+    """Update the current text."""
+    store._state.current_text = new_text
+    return frozenset({"_state.current_text"})
 
-        if self._state.wordcount == self._state.target_wordcount:
-            self.set_finished(True)
 
-    @Store.action
-    def update_text(self: Self, new_text: str) -> frozenset[str]:
-        self._state.current_text = new_text
-        return frozenset({"_state.current_text"})
+update_text.payload_json_schema = JSONSchema({"type": "string"})
 
-    @Store.action
-    def update_wordcount(self: Self, payload: None = None) -> frozenset[str]:
-        text = self._state.current_text
 
-        self._state.wordcount = get_wordcount(text)
-        return frozenset({"_state.wordcount"})
+@store_updater
+def update_wordcount(store: ExactLengthStore, _payload: None = None) -> frozenset[str]:
+    """Recalculate wordcount from current text."""
+    store._state.wordcount = get_wordcount(store._state.current_text)
+    return frozenset({"_state.wordcount"})
 
-    @Store.action
-    def set_finished(self: Self, payload: bool):
-        self._state.finished = payload
-        return frozenset({"_state.finished"})
+
+update_wordcount.payload_json_schema = JSONSchema({"type": "number"})
+
+
+@store_updater
+def update_finished(store: ExactLengthStore, finished: bool) -> frozenset[str]:
+    """Set the finished flag."""
+    store._state.finished = finished
+    return frozenset({"_state.finished"})
+
+
+update_finished.payload_json_schema = JSONSchema({"type": "boolean"})
+
+# TODO: We can abstract this patters for simple setters. We just need to provide the path to the state, e.g., store.setter("_state.finished") returns a StoreUpdater

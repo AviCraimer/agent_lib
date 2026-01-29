@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 
-from agent_lib.agent.Agent import Agent, PostProcessedResponse
+from typing import cast
+
+from agent_lib.agent.Agent import Agent, PostProcessedResponse, ToolCall
 from agent_lib.agent.response_helpers import reponse_as_single_tool_call
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
@@ -170,7 +172,7 @@ class TestWrapAsToolCall:
     def test_wrap_as_tool_call_wraps_response(self) -> None:
         """Transformer wraps response as single tool call."""
         transformer = reponse_as_single_tool_call("update_text")
-        result = transformer("some text")
+        result = cast(list[ToolCall], transformer("some text"))
 
         assert len(result) == 1
         assert result[0]["tool_name"] == "update_text"
@@ -180,7 +182,7 @@ class TestWrapAsToolCall:
         """Transformer preserves the response string exactly."""
         transformer = reponse_as_single_tool_call("save")
         response_with_special_chars = "Hello\nWorld\twith 'quotes' and \"more\""
-        result = transformer(response_with_special_chars)
+        result = cast(list[ToolCall], transformer(response_with_special_chars))
 
         assert result[0]["payload"] == response_with_special_chars
 

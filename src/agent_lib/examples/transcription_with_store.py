@@ -1,4 +1,12 @@
+"""Example demonstrating Store with component connection.
+
+This example shows how to use Store.connect() to bind components to state.
+Since there's no AgentApp or agent involvement, state mutations are done
+via simple methods rather than StoreUpdaters.
+"""
+
 from __future__ import annotations
+
 from agent_lib.context.Props import NoProps
 from agent_lib.examples.transcription import (
     AudioInstructions,
@@ -7,14 +15,16 @@ from agent_lib.examples.transcription import (
     TranscriptCTA,
     TranscriptionAssistantRole,
 )
-from agent_lib.store.Action import Action
 from agent_lib.store.Store import Store
 
 
-# Store (state is now part of the store itself)
-
-
 class TranscriptionStore(Store):
+    """Store for transcription settings.
+
+    This store manages transcription configuration (format, language).
+    Since there's no agent involved, state mutations are simple methods.
+    """
+
     audio_format: str
     language: str
 
@@ -23,19 +33,13 @@ class TranscriptionStore(Store):
         self.audio_format = audio_format
         self.language = language
 
-    @Store.action
-    def set_language(self, lang: str) -> frozenset[str]:
-        if self.language == lang:
-            return Action.scope.no_op
+    def set_language(self, lang: str) -> None:
+        """Set the transcription language."""
         self.language = lang
-        return frozenset({"language"})
 
-    @Store.action
-    def set_format(self, fmt: str) -> frozenset[str]:
-        if self.audio_format == fmt:
-            return Action.scope.no_op
+    def set_format(self, fmt: str) -> None:
+        """Set the audio format."""
         self.audio_format = fmt
-        return frozenset({"audio_format"})
 
 
 # Usage
@@ -70,9 +74,9 @@ if __name__ == "__main__":
     print(TranscriptionSystemPrompt.render(NoProps()))
 
     print("\n=== After changing language to Spanish ===")
-    store.set_language("Spanish")  # Access via descriptor - auto-bound!
+    store.set_language("Spanish")
     print(TranscriptionSystemPrompt.render(NoProps()))
 
     print("\n=== After changing format to wav ===")
-    store.set_format("wav")  # Access via descriptor - auto-bound!
+    store.set_format("wav")
     print(TranscriptionSystemPrompt.render(NoProps()))

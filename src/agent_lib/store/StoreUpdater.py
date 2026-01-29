@@ -1,0 +1,109 @@
+"""StoreUpdater - a Tool that mutates Store state synchronously.
+
+StoreUpdater replaces the Action pattern with a unified Tool-based approach.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
+
+from agent_lib.store.Store import Store
+from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
+from agent_lib.tool.ToolMetadata import ToolMetadata
+from agent_lib.util.json_utils import JSONSchema
+
+
+@dataclass
+class StoreUpdater[P, S: Store](StoreUpdaterBase[P, S]):
+    """A Tool that mutates Store state synchronously with change tracking.
+
+    StoreUpdater combines the tool interface with state mutation, replacing the
+    separate Action + action_to_tool pattern.
+
+    Type Parameters:
+        P: Payload type the updater accepts
+        S: Store type this updater operates on
+
+    Attributes:
+        name: Unique identifier for this tool
+        description: Human-readable description (useful for LLM tool selection)
+        payload_json_schema: JSON schema describing the payload format
+        updater: Function that receives (store, payload) and returns affected paths
+    """
+
+    class scope:
+        """Helper constants for updater return values (avoid magic strings)."""
+
+        no_op: ClassVar[frozenset[str]] = frozenset()
+        """Return this when updater made no changes - skips diff and notifications."""
+
+        full_diff: ClassVar[frozenset[str]] = frozenset({"."})
+        """Return this when scope is unknown - diffs entire state tree."""
+
+    name: str
+    description: str
+    payload_json_schema: JSONSchema
+    updater: Callable[[S, P], frozenset[str]]
+    _app: Any = field(default=None, repr=False)
+    _store: Any = field(default=None, repr=False)
+
+    @property
+    def handler(self) -> Callable[[P], None]:
+        """Tool handler that routes through process_update."""
+
+        def _handler(payload: P) -> None:
+            self.process_update(self.updater, payload)
+
+        return _handler
+
+    def __call__(self, payload: P) -> None:
+        """Invoke the updater with the given payload."""
+        self.handler(payload)
+
+    def to_metadata(self) -> ToolMetadata:
+        """Convert to tool metadata for agent state."""
+        return ToolMetadata(
+            name=self.name,
+            description=self.description,
+            payload_json_schema=self.payload_json_schema,
+        )
+
+
+def store_updater[S: Store, P](
+    handler: Callable[[S, P], frozenset[str]],
+) -> StoreUpdater[P, S]:
+    """Decorator to create a StoreUpdater from a handler function.
+
+    This provides a convenient way to define StoreUpdaters inline. The handler
+    function receives (store, payload) and should mutate the store state,
+    returning a frozenset of affected paths for efficient diffing.
+
+    Usage:
+        @store_updater
+        def update_text(store: MyStore, new_text: str) -> frozenset[str]:
+            store._state.current_text = new_text
+            return frozenset({"_state.current_text"})
+
+        # Later, bind and grant:
+        update_text.bind(app)
+        app.grant_tool("writer", update_text)
+
+    Args:
+        handler: Function that takes (store, payload) and returns affected paths
+
+    Returns:
+        A StoreUpdater wrapping the handler
+
+    Note:
+        The returned StoreUpdater has an empty payload_json_schema. For LLM tools,
+        you should set the schema after creation:
+            update_text.payload_json_schema = JSONSchema({...})
+    """
+    return StoreUpdater(
+        name=handler.__name__,
+        description=handler.__doc__ or "",
+        payload_json_schema=JSONSchema({}),
+        updater=handler,
+    )

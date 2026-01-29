@@ -1,14 +1,13 @@
-"""Subscription management for Store."""
+"""Subscription management for Store state changes.
+
+Subscribers are now managed by AgentApp, not Store directly.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator
-from typing import TYPE_CHECKING
 
 from deepdiff import Delta, parse_path
-
-if TYPE_CHECKING:
-    from agent_lib.store.Store import Store
 
 # Callback receives an `affects` function to check if a path was changed
 type SubscriberCallback = Callable[[Callable[[str], bool]], None]
@@ -61,17 +60,18 @@ def _make_affects(delta: Delta) -> Callable[[str], bool]:
 
 
 class Subscribers:
-    """Manages store subscription callbacks.
+    """Manages subscription callbacks for state changes.
 
     Subscribers receive an `affects(path)` function to check if specific
     paths were changed, abstracting away the Delta internals.
+
+    Subscribers are managed by AgentApp rather than Store, keeping Store
+    focused on state management while AgentApp handles the notification flow.
     """
 
-    _store: Store
     _callbacks: list[SubscriberCallback]
 
-    def __init__(self, store: Store) -> None:
-        self._store = store
+    def __init__(self) -> None:
         self._callbacks = []
 
     def append(self, callback: SubscriberCallback) -> None:

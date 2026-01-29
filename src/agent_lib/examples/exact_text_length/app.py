@@ -1,6 +1,23 @@
+"""Example app demonstrating exact text length writing.
+
+This example shows how to use AgentApp and StoreUpdater to create an agent
+that writes text to hit an exact word count.
+"""
+
+# pyright: reportPrivateUsage=false
+# App needs access to Store internals (_state) for state mutations in updaters.
+
+from collections.abc import Callable
+
 from agent_lib.agent.response_helpers import reponse_as_single_tool_call
-from agent_lib.agent_app.AgentRuntime import AgentRuntime
-from agent_lib.examples.exact_text_length.store import ExactLengthStore
+from agent_lib.agent_app.AgentApp import AgentApp
+from agent_lib.examples.exact_text_length.store import (
+    ExactLengthState,
+    ExactLengthStore,
+    update_text,
+    update_wordcount,
+    update_finished,
+)
 from agent_lib.examples.exact_text_length.writer_context import (
     WriterComponent,
     map_store_to_writer,
@@ -8,12 +25,20 @@ from agent_lib.examples.exact_text_length.writer_context import (
 from agent_lib.llm_integrations.anthropic.claude_client import ClaudeClient
 
 
-class ExactLengthApp(AgentRuntime[ExactLengthStore]):
+class ExactLengthApp(AgentApp[ExactLengthStore]):
 
     def __init__(self, user_prompt: str, target_wordcount: int):
         store = ExactLengthStore(user_prompt, target_wordcount)
         self._store: ExactLengthStore = store
         super().__init__(store)
+
+        # Bind StoreUpdaters to this app
+        update_text.bind(self)
+        update_wordcount.bind(self)
+        update_finished.bind(self)
+
+        # Subscribe to trigger wordcount update when text changes
+        self.subscribers.append(self._on_text_change)
 
         WriterContext = store.connect(WriterComponent, map_store_to_writer)
 
@@ -23,11 +48,27 @@ class ExactLengthApp(AgentRuntime[ExactLengthStore]):
             system_prompt=WriterContext,
             post_process_response=reponse_as_single_tool_call("update_text"),
         )
-        update_text = self.action_to_tool("update_text", "update_text")
 
+        # Grant the update_text tool to the writer agent
         self.grant_tool("writer", update_text)
-        # Set the writer to act initially.
-        store.update_should_act({"agent_name": "writer", "should_act": True})
+
+        # Set the writer to act initially
+        from agent_lib.store.updaters.update_should_act import (
+            UpdateShouldActPayload,
+            update_should_act,
+        )
+
+        update_should_act.bind(self)
+        update_should_act(UpdateShouldActPayload(agent_name="writer", should_act=True))
+
+    def _on_text_change(self, affects: Callable[[str], bool]) -> None:
+        """Handle text changes by updating wordcount and checking completion."""
+        if affects("current_text"):
+            update_wordcount(None)
+
+        state: ExactLengthState = self._store._state
+        if state.wordcount == state.target_wordcount:
+            update_finished(True)
 
     def run(self):
         count = 1
