@@ -2,7 +2,10 @@ from os import write
 from agent_lib.context.components.Tag import PromptTag, SystemTag, Tag, TagProps
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import Props, propsclass
-from agent_lib.examples.exact_text_length.store import ExactLengthStore
+from agent_lib.examples.exact_text_length.store import (
+    ExactLengthState,
+    ExactLengthStore,
+)
 
 
 @propsclass
@@ -44,12 +47,12 @@ def writer_render_fn(props: WriterProps):
 WriterComponent = CtxComponent(writer_render_fn, WriterProps)
 
 
-def map_store_to_writer(store: ExactLengthStore) -> WriterProps:
+def map_to_writer(state: ExactLengthState) -> WriterProps:
     return WriterProps(
-        user_prompt=store.state.user_prompt,
-        target_wordcount=store.state.target_wordcount,
-        prev_generated_text=store.state.current_text,
-        current_wordcount=store.state.wordcount,
+        user_prompt=state.user_prompt,
+        target_wordcount=state.target_wordcount,
+        prev_generated_text=state.current_text,
+        current_wordcount=state.wordcount,
     )
 
 

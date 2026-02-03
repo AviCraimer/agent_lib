@@ -15,5 +15,6 @@
   "reportUnnecessaryCast": "warning",
   "reportUnnecessaryIsInstance": "warning",
   "reportUnreachable": "warning",
-  "enableTypeIgnoreComments": true
+  "enableTypeIgnoreComments": true,
+  "reportInvalidTypeVarUse": false
 }

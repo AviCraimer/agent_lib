@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict
 
 from agent_lib.store.StoreUpdater import StoreUpdater, store_updater
+from agent_lib.store.state.State import State
 from agent_lib.util.json_utils import JSONSchema
 
 if TYPE_CHECKING:
@@ -38,8 +39,10 @@ update_should_act_schema = JSONSchema(
 
 
 @store_updater(schema=update_should_act_schema)
-def update_should_act(store: Store, payload: UpdateShouldActPayload) -> frozenset[str]:
+def update_should_act[S: State](
+    state: S, payload: UpdateShouldActPayload
+) -> frozenset[str]:
     """Update an agent's `should_act` flag. When an agent's should_act flag is on it will act every turn until its flag is switched off."""
     agent_name = payload["agent_name"]
-    store.state.agent_state[agent_name].should_act = payload["should_act"]
-    return frozenset({"_state.agent_state"})
+    state.agent_state[agent_name].should_act = payload["should_act"]
+    return frozenset({"agent_state"})

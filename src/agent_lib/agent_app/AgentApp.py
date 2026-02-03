@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
+from deepdiff import Delta
+
 from agent_lib.agent.Agent import Agent, PostProcessResponseFn
 from agent_lib.agent.LLMClient import LLMClient
 from agent_lib.context.components.ChatMessages import ChatMessages, ChatMessagesProps
@@ -20,6 +22,7 @@ from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
 from agent_lib.store.state.AgentState import AgentState
 from agent_lib.store.Subscribers import Subscribers
+from agent_lib.store.state.State import State
 from agent_lib.store.updaters.update_should_act import (
     UpdateShouldActPayload,
     update_should_act,
@@ -31,7 +34,7 @@ if TYPE_CHECKING:
     from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
 
 
-class AgentApp[Str: Store]:
+class AgentApp[StateT: State]:
     """Manages agent lifecycle, separate from Store.
 
     AgentApp maintains the security boundary between agent data (in Store._state.agent_state)
@@ -66,12 +69,12 @@ class AgentApp[Str: Store]:
         app.run()
     """
 
-    _store: Str
+    _store: Store[StateT]
     _agents: dict[str, Agent]
     _tools: dict[str, dict[str, Any]]  # agent_name -> tool_name -> Tool|StoreUpdater
     subscribers: Subscribers
 
-    def __init__(self, store: Str) -> None:
+    def __init__(self, store: Store[StateT]) -> None:
         """Create an AgentApp managing agents for the given Store.
 
         Args:
@@ -81,6 +84,9 @@ class AgentApp[Str: Store]:
         self._agents = {}
         self._tools = {}
         self.subscribers = Subscribers()
+
+        # Connect the store to the subscribers
+        self._store.notify = lambda delta: self.subscribers.notify(delta)
 
     def create_agent(
         self,
@@ -127,9 +133,7 @@ class AgentApp[Str: Store]:
         if messages is None:
             messages = self._store.connect(
                 ChatMessages,
-                lambda s, n=name: ChatMessagesProps(
-                    history=s.state.agent_state[n].history
-                ),
+                lambda s, n=name: ChatMessagesProps(history=s.agent_state[n].history),
             )
 
         # Create context (connected to store, renders dynamically)
@@ -244,7 +248,7 @@ class AgentApp[Str: Store]:
     def make_should_act_tool(
         self,
         allowed_agents: frozenset[str] | Literal["all"],
-    ) -> StoreUpdaterBase[UpdateShouldActPayload, Store]:
+    ) -> StoreUpdaterBase[StateT, UpdateShouldActPayload]:
         """Create a should_act tool with constrained agent access.
 
         Returns a copy of the update_should_act StoreUpdater that validates
@@ -261,7 +265,7 @@ class AgentApp[Str: Store]:
         from agent_lib.store.StoreUpdater import StoreUpdater
 
         def validated_handler(
-            store: Store, payload: UpdateShouldActPayload
+            store: StateT, payload: UpdateShouldActPayload
         ) -> frozenset[str]:
             agent_name = payload["agent_name"]
             if allowed_agents != "all" and agent_name not in allowed_agents:

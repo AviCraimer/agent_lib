@@ -9,14 +9,20 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
 
-from agent_lib.store.Store import Store
+from agent_lib.agent_app.AgentApp import AgentApp
+from agent_lib.store.StoreUpdater import StoreUpdater
+from agent_lib.store.state.State import State
 from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
 from agent_lib.tool.ToolMetadata import ToolMetadata
 from agent_lib.util.json_utils import JSONSchema
 
 
 @dataclass
-class StoreUpdaterAsync[P, R, S: Store](StoreUpdaterBase[P, S]):
+class StoreUpdaterAsync[
+    S: State,
+    P,
+    R,
+](StoreUpdaterBase[S, Exception]):
     """A Tool that performs async work then mutates Store state.
 
     StoreUpdaterAsync separates async work (which may fail) from state mutation
@@ -26,16 +32,19 @@ class StoreUpdaterAsync[P, R, S: Store](StoreUpdaterBase[P, S]):
     - Snapshot/diff/notify flow runs around the sync mutation
 
     Type Parameters:
+        S: State type this updater operates on
         P: Payload type the updater accepts
         R: Result type returned by async_handler and passed to on_success
-        S: Store type this updater operates on
+
+    Parent Class:
+        StoreUpdaterBase[S, Exception] because we use the default implementation of `process_update` only on error with the Exception as the payload. For success we call the on_success updater directly.
 
     Attributes:
         name: Unique identifier for this tool
         description: Human-readable description
         payload_json_schema: JSON schema describing the payload format
         async_handler: Async function that does read-only work and returns result
-        on_success: Sync function that mutates state with the result
+        on_success: A synchronous updater that is called with the result of a succesful async call as a payload.
         on_error: Optional sync function that handles errors by mutating state
     """
 
@@ -43,7 +52,7 @@ class StoreUpdaterAsync[P, R, S: Store](StoreUpdaterBase[P, S]):
     description: str
     payload_json_schema: JSONSchema
     async_handler: Callable[[S, P], Coroutine[Any, Any, R]]
-    on_success: Callable[[S, R], frozenset[str]]
+    on_success: StoreUpdater[S, R]
     on_error: Callable[[S, Exception], frozenset[str]] | None = None
     _app: Any = field(default=None, repr=False)
     _store: Any = field(default=None, repr=False)
@@ -57,7 +66,7 @@ class StoreUpdaterAsync[P, R, S: Store](StoreUpdaterBase[P, S]):
                 raise RuntimeError(f"StoreUpdaterAsync '{self.name}' not bound.")
             try:
                 result = await self.async_handler(self._store, payload)
-                self.process_update(self.on_success, result)
+                self.on_success(result)
             except Exception as e:
                 if self.on_error:
                     self.process_update(self.on_error, e)
@@ -77,3 +86,8 @@ class StoreUpdaterAsync[P, R, S: Store](StoreUpdaterBase[P, S]):
             description=self.description,
             payload_json_schema=self.payload_json_schema,
         )
+
+    def bind(self, app: AgentApp[S]) -> None:
+        """Ensures that on_success handler is bound the app, this avoids having to bind it superately."""
+        super().bind(app)
+        self.on_success.bind(app)

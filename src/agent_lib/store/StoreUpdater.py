@@ -9,22 +9,22 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, overload
 
-from agent_lib.store.Store import Store
+from agent_lib.store.state.State import State
 from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
 from agent_lib.tool.ToolMetadata import ToolMetadata
 from agent_lib.util.json_utils import JSONSchema
 
 
 @dataclass
-class StoreUpdater[P, S: Store](StoreUpdaterBase[P, S]):
+class StoreUpdater[S: State, P](StoreUpdaterBase[S, P]):
     """A Tool that mutates Store state synchronously with change tracking.
 
     StoreUpdater combines the tool interface with state mutation, replacing the
     separate Action + action_to_tool pattern.
 
     Type Parameters:
+        S: State type this updater operates on
         P: Payload type the updater accepts
-        S: Store type this updater operates on
 
     Attributes:
         name: Unique identifier for this tool
@@ -62,6 +62,7 @@ class StoreUpdater[P, S: Store](StoreUpdaterBase[P, S]):
         """Invoke the updater with the given payload."""
         self.handler(payload)
 
+    # TODO: This to_metadata method looks like it should be a default implementation on the Tool class.
     def to_metadata(self) -> ToolMetadata:
         """Convert to tool metadata for agent state."""
         return ToolMetadata(
@@ -71,69 +72,48 @@ class StoreUpdater[P, S: Store](StoreUpdaterBase[P, S]):
         )
 
 
-# def store_updater[S: Store, P](
-#     handler: Callable[[S, P], frozenset[str]],
-# ) -> StoreUpdater[P, S]:
-#     """Decorator to create a StoreUpdater from a handler function.
-
-#     This provides a convenient way to define StoreUpdaters inline. The handler
-#     function receives (store, payload) and should mutate the store state,
-#     returning a frozenset of affected paths for efficient diffing.
-
-#     Usage:
-#         @store_updater
-#         def update_text(store: MyStore, new_text: str) -> frozenset[str]:
-#             store._state.current_text = new_text
-#             return frozenset({"_state.current_text"})
-
-#         # Later, bind and grant:
-#         update_text.bind(app)
-#         app.grant_tool("writer", update_text)
-
-#     Args:
-#         handler: Function that takes (store, payload) and returns affected paths
-
-#     Returns:
-#         A StoreUpdater wrapping the handler
-
-#     Note:
-#         The returned StoreUpdater has an empty payload_json_schema. For LLM tools,
-#         you should set the schema after creation:
-#             update_text.payload_json_schema = JSONSchema({...})
-#     """
-#     return StoreUpdater(
-#         name=handler.__name__,
-#         description=handler.__doc__ or "",
-#         payload_json_schema=JSONSchema({}),
-#         updater=handler,
-#     )
-
-
+# ***STORE UPDATER DECORATOR***
 @overload
-def store_updater[S: Store, P](
+def store_updater[S: State, P](
     handler: Callable[[S, P], frozenset[str]],
     *,
     schema: JSONSchema | None = None,
-) -> StoreUpdater[P, S]: ...
+) -> StoreUpdater[S, P]: ...
 
 
 @overload
-def store_updater[S: Store, P](
+def store_updater[S: State, P](
     handler: None = ...,
     *,
     schema: JSONSchema | None = None,
-) -> Callable[[Callable[[S, P], frozenset[str]]], StoreUpdater[P, S]]: ...
+) -> Callable[[Callable[[S, P], frozenset[str]]], StoreUpdater[S, P]]: ...
 
 
-def store_updater[S: Store, P](
+def store_updater[S: State, P](
     handler: Callable[[S, P], frozenset[str]] | None = None,
     *,
     schema: JSONSchema | None = None,
 ) -> (
-    StoreUpdater[P, S]
-    | Callable[[Callable[[S, P], frozenset[str]]], StoreUpdater[P, S]]
+    StoreUpdater[S, P]
+    | Callable[[Callable[[S, P], frozenset[str]]], StoreUpdater[S, P]]
 ):
-    def wrap(fn: Callable[[S, P], frozenset[str]]) -> StoreUpdater[P, S]:
+    """Decorator to create a StoreUpdater from a handler function.
+
+    This provides a convenient way to define StoreUpdaters inline. The handler
+    function receives (store, payload) and should mutate the store state,
+    returning a frozenset of affected paths for efficient diffing.
+
+    Usage:
+        @store_updater
+        def update_text(store: MyStore, new_text: str) -> frozenset[str]:
+            store._state.current_text = new_text
+            return frozenset({"_state.current_text"})
+
+        # Later, bind and  grant:
+        update_text.bind(app)
+        app.grant_tool("writer", update_text)"""
+
+    def wrap(fn: Callable[[S, P], frozenset[str]]) -> StoreUpdater[S, P]:
         return StoreUpdater(
             name=fn.__name__,
             description=fn.__doc__ or "",

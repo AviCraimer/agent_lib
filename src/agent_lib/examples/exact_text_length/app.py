@@ -20,16 +20,20 @@ from agent_lib.examples.exact_text_length.store import (
 )
 from agent_lib.examples.exact_text_length.writer_context import (
     WriterComponent,
-    map_store_to_writer,
+    map_to_writer,
 )
 from agent_lib.llm_integrations.anthropic.claude_client import ClaudeClient
+from agent_lib.store.Store import Store
 
 
-class ExactLengthApp(AgentApp[ExactLengthStore]):
+class ExactLengthApp(AgentApp[ExactLengthState]):
 
     def __init__(self, user_prompt: str, target_wordcount: int):
-        store = ExactLengthStore(user_prompt, target_wordcount)
-        self._store: ExactLengthStore = store
+
+        state = ExactLengthState()
+        state.user_prompt = user_prompt
+        state.target_wordcount = target_wordcount
+        store = Store(state)
         super().__init__(store)
 
         # Bind StoreUpdaters to this app
@@ -40,7 +44,7 @@ class ExactLengthApp(AgentApp[ExactLengthStore]):
         # Subscribe to trigger wordcount update when text changes
         self.subscribers.append(self._on_text_change)
 
-        WriterContext = store.connect(WriterComponent, map_store_to_writer)
+        WriterContext = store.connect(WriterComponent, map_to_writer)
 
         self.create_agent(
             name="writer",

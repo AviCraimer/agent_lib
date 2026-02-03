@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, TypedDict
 
 from agent_lib.store.StoreUpdater import store_updater
+from agent_lib.store.state.State import State
 from agent_lib.util.json_utils import JSONSchema
 
 if TYPE_CHECKING:
@@ -54,7 +55,7 @@ record_history_schema = JSONSchema(
 
 
 @store_updater(schema=record_history_schema)
-def record_history(store: Store, payload: RecordHistoryPayload) -> frozenset[str]:
+def record_history(state: State, payload: RecordHistoryPayload) -> frozenset[str]:
     """Append messages to an agent's history.
 
     Args:
@@ -66,8 +67,8 @@ def record_history(store: Store, payload: RecordHistoryPayload) -> frozenset[str
     """
     agent_name = payload["agent_name"]
     messages = payload["messages"]
-    store.state.agent_state[agent_name].history.extend(messages)
-    return frozenset({"_state.agent_state"})
+    state.agent_state[agent_name].history.extend(messages)
+    return frozenset({"agent_state"})
 
 
 # TODO: Can we add the agent_name to this diff string?

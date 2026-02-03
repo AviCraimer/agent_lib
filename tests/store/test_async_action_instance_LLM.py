@@ -114,13 +114,15 @@ def _fetch_on_error(store: HasApiData, error: Exception) -> frozenset[str]:
         return frozenset({"data._error"})
 
 
-fetch_data_updater: StoreUpdaterAsync[FetchPayload, FetchResult, Any] = StoreUpdaterAsync(
-    name="fetch_data",
-    description="Fetch data from an API endpoint.",
-    payload_json_schema=JSONSchema({}),
-    async_handler=_fetch_handler,
-    on_success=_fetch_on_success,
-    on_error=_fetch_on_error,
+fetch_data_updater: StoreUpdaterAsync[Any, FetchPayload, FetchResult] = (
+    StoreUpdaterAsync(
+        name="fetch_data",
+        description="Fetch data from an API endpoint.",
+        payload_json_schema=JSONSchema({}),
+        async_handler=_fetch_handler,
+        on_success=_fetch_on_success,
+        on_error=_fetch_on_error,
+    )
 )
 
 
@@ -176,7 +178,9 @@ class TestStoreUpdaterAsyncSuccess:
         """Successful fetch notifies subscribers with affects function."""
         app = ApiDataApp(api_key="secret-key-123")
         affected_paths: list[bool] = []
-        app.subscribers.append(lambda affects: affected_paths.append(affects("data.user_info")))
+        app.subscribers.append(
+            lambda affects: affected_paths.append(affects("data.user_info"))
+        )
 
         payload = FetchPayload(api_endpoint="success.com", data_result_key="user_info")
         await fetch_data_updater(payload)
@@ -206,7 +210,9 @@ class TestStoreUpdaterAsyncError:
         """Failed fetch notifies subscribers with affects function."""
         app = ApiDataApp(api_key="secret-key-456")
         affected_paths: list[bool] = []
-        app.subscribers.append(lambda affects: affected_paths.append(affects("data.weather")))
+        app.subscribers.append(
+            lambda affects: affected_paths.append(affects("data.weather"))
+        )
 
         payload = FetchPayload(api_endpoint="fail.com", data_result_key="weather")
         await fetch_data_updater(payload)
