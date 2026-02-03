@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Self
 
 from agent_lib.agent_app.AgentApp import AgentApp
 from agent_lib.store.StoreUpdater import StoreUpdater
@@ -87,7 +87,8 @@ class StoreUpdaterAsync[
             payload_json_schema=self.payload_json_schema,
         )
 
-    def bind(self, app: AgentApp[S]) -> None:
-        """Ensures that on_success handler is bound the app, this avoids having to bind it superately."""
-        super().bind(app)
-        self.on_success.bind(app)
+    def bind(self, app: AgentApp[S]) -> Self:
+        """Ensures that on_success handler is bound the app, this avoids having to bind it seprately."""
+        bound = super().bind(app)
+        bound.on_success = self.on_success.bind(app)
+        return bound

@@ -176,9 +176,7 @@ class AgentApp[StateT: State]:
 
         return agent
 
-    def grant_tool(
-        self, agent_name: str, tool: Tool[Any, Any] | StoreUpdaterBase[Any, Any]
-    ) -> None:
+    def grant_tool(self, agent_name: str, tool: Tool[Any, Any]) -> None:
         """Grant a tool to an agent.
 
         Adds tool metadata to agent's state and stores the handler in the app.
@@ -198,7 +196,7 @@ class AgentApp[StateT: State]:
         from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
 
         if isinstance(tool, StoreUpdaterBase):
-            tool.bind(self)
+            tool = tool.bind(self)
 
         # Add metadata to agent state
         metadata = tool.to_metadata()
