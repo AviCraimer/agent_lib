@@ -11,9 +11,8 @@ from collections.abc import Callable
 
 from agent_lib.agent.response_helpers import reponse_as_single_tool_call
 from agent_lib.agent_app.AgentApp import AgentApp
-from agent_lib.examples.exact_text_length.store import (
+from agent_lib.examples.exact_text_length.state import (
     ExactLengthState,
-    ExactLengthStore,
     update_text,
     update_wordcount,
     update_finished,

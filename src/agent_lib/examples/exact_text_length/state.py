@@ -6,7 +6,7 @@ This store manages state for an agent that writes text to hit an exact word coun
 from dataclasses import dataclass
 
 from agent_lib.store.state.State import State
-from agent_lib.store.Store import Store
+
 from agent_lib.store.StoreUpdater import store_updater
 from agent_lib.util.json_utils import JSONSchema
 
@@ -24,43 +24,32 @@ def get_wordcount(text: str) -> int:
     return len(text.split(" "))
 
 
-class ExactLengthStore(Store[ExactLengthState]):
-    _state: ExactLengthState
-
-    def __init__(self, user_prompt: str, target_wordcount: int) -> None:
-        self._state = ExactLengthState(
-            user_prompt=user_prompt,
-            target_wordcount=target_wordcount,
-        )
-        super().__init__()
-
-
 # Define Store Updaters for this app
 @store_updater
-def update_text(store: ExactLengthStore, new_text: str) -> frozenset[str]:
+def update_text(state: ExactLengthState, new_text: str) -> frozenset[str]:
     """Update the current text."""
-    store._state.current_text = new_text
-    return frozenset({"_state.current_text"})
+    state.current_text = new_text
+    return frozenset({"current_text"})
 
 
 update_text.payload_json_schema = JSONSchema({"type": "string"})
 
 
 @store_updater
-def update_wordcount(store: ExactLengthStore, _payload: None = None) -> frozenset[str]:
+def update_wordcount(state: ExactLengthState, _payload: None = None) -> frozenset[str]:
     """Recalculate wordcount from current text."""
-    store._state.wordcount = get_wordcount(store._state.current_text)
-    return frozenset({"_state.wordcount"})
+    state.wordcount = get_wordcount(state.current_text)
+    return frozenset({"wordcount"})
 
 
 update_wordcount.payload_json_schema = JSONSchema({"type": "number"})
 
 
 @store_updater
-def update_finished(store: ExactLengthStore, finished: bool) -> frozenset[str]:
+def update_finished(state: ExactLengthState, finished: bool) -> frozenset[str]:
     """Set the finished flag."""
-    store._state.finished = finished
-    return frozenset({"_state.finished"})
+    state.finished = finished
+    return frozenset({"finished"})
 
 
 update_finished.payload_json_schema = JSONSchema({"type": "boolean"})

@@ -2,7 +2,7 @@ from os import write
 from agent_lib.context.components.Tag import PromptTag, SystemTag, Tag, TagProps
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import Props, propsclass
-from agent_lib.examples.exact_text_length.store import (
+from agent_lib.examples.exact_text_length.state import (
     ExactLengthState,
     ExactLengthStore,
 )

@@ -16,14 +16,11 @@ Usage:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict
+from typing import TypedDict
 
 from agent_lib.store.StoreUpdater import store_updater
 from agent_lib.store.state.State import State
 from agent_lib.util.json_utils import JSONSchema
-
-if TYPE_CHECKING:
-    from agent_lib.store.Store import Store
 
 
 class RecordHistoryPayload(TypedDict):
