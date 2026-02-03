@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any
-
+from typing import TYPE_CHECKING, Any, Literal, Self
+from copy import copy
 from deepdiff import DeepDiff, Delta
 
 
@@ -46,12 +46,16 @@ class StoreUpdaterBase[S: State, P](ABC):
     _store: Store[S] | None
     name: str  # Unique identifier for this tool - set by subclasses
 
+    validator: Callable[[P], Literal[True] | str] = (
+        lambda p: True
+    )  # Str is used in the error message
+
     @abstractmethod
     def to_metadata(self) -> ToolMetadata:
         """Convert to tool metadata for agent state."""
         ...
 
-    def bind(self, app: AgentApp[S]) -> None:
+    def bind(self, app: AgentApp[S]) -> Self:
         """Bind this updater to an AgentApp.
 
         Must be called before the updater can be used. This gives the updater
@@ -61,9 +65,15 @@ class StoreUpdaterBase[S: State, P](ABC):
         Args:
             app: The AgentApp to bind to
         """
-        # TODO: This should return a new instance with _app and _store set rather than returning the original instance.
-        self._app = app
-        self._store = app._store
+
+        bound = copy(self)
+        bound._app = app
+        bound._store = app._store
+        # TODO: Figure this out later, the new name was causing tool calls to fail to I commented it out.
+        # app_name_str = f"@{app.name}"
+        # clean_name = self.name.replace(app_name_str, "")
+        # bound.name = f"{clean_name}@{app.name}"
+        return bound
 
     def process_update(
         self,
@@ -88,6 +98,9 @@ class StoreUpdaterBase[S: State, P](ABC):
             raise RuntimeError(
                 f"StoreUpdater '{self.name}' not bound. Call .bind(app) first."
             )
+
+        if isinstance(self.validator, str):
+            raise ValueError(str)
 
         state_snapshot = self._store.state
         scope = updater(state_snapshot, payload)  # mutates the snapshot

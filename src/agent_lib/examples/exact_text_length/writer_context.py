@@ -4,7 +4,6 @@ from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import Props, propsclass
 from agent_lib.examples.exact_text_length.state import (
     ExactLengthState,
-    ExactLengthStore,
 )
 
 

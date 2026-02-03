@@ -182,6 +182,7 @@ class Agent:
 
         # Get current tool metadata from state
         state = self.get_state()
+
         tools_by_name = {t.name: t for t in state.tools}
 
         # Validate each tool call

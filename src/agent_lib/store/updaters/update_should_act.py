@@ -42,4 +42,6 @@ def update_should_act[S: State](
     """Update an agent's `should_act` flag. When an agent's should_act flag is on it will act every turn until its flag is switched off."""
     agent_name = payload["agent_name"]
     state.agent_state[agent_name].should_act = payload["should_act"]
-    return frozenset({"agent_state"})
+    diff_path = "agent_state" + "." + agent_name
+
+    return frozenset({diff_path})

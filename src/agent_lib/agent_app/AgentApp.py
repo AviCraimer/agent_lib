@@ -20,14 +20,17 @@ from agent_lib.context.components.ChatMessages import ChatMessages, ChatMessages
 from agent_lib.context.components.LLMContext import LLMContext
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps
+from agent_lib.store.snapshot import snapshot
 from agent_lib.store.state.AgentState import AgentState
 from agent_lib.store.Subscribers import Subscribers
 from agent_lib.store.state.State import State
+from agent_lib.store.updaters.update_agent_state import update_agent_state
 from agent_lib.store.updaters.update_should_act import (
     UpdateShouldActPayload,
     update_should_act,
 )
 from agent_lib.tool.Tool import Tool
+
 
 if TYPE_CHECKING:
     from agent_lib.store.Store import Store
@@ -74,19 +77,25 @@ class AgentApp[StateT: State]:
     _tools: dict[str, dict[str, Any]]  # agent_name -> tool_name -> Tool|StoreUpdater
     subscribers: Subscribers
 
-    def __init__(self, store: Store[StateT]) -> None:
+    def __init__(self, name: str, store: Store[StateT]) -> None:
         """Create an AgentApp managing agents for the given Store.
 
         Args:
             store: The Store whose agent_state this app manages
         """
+        self.name = name
         self._store = store
         self._agents = {}
         self._tools = {}
         self.subscribers = Subscribers()
-
+        self.update_agent_state = update_agent_state.bind(self)
         # Connect the store to the subscribers
         self._store.notify = lambda delta: self.subscribers.notify(delta)
+
+    @property
+    def state(self) -> StateT:
+        """Convinence property to get a state snapshot directly from the app instance."""
+        return self._store.state
 
     def create_agent(
         self,
@@ -122,9 +131,9 @@ class AgentApp[StateT: State]:
         if name in self._agents:
             raise ValueError(f"Agent '{name}' already exists")
 
-        # Create state and add to Store
-        state = state_class(agent_name=name, **state_kwargs)
-        self._store.state.agent_state[name] = state
+        # Create agent state and add to Store
+        agent_state = state_class(agent_name=name, **state_kwargs)
+        self.update_agent_state(agent_state)
 
         # Initialize tool storage for this agent
         self._tools[name] = {}
@@ -140,8 +149,15 @@ class AgentApp[StateT: State]:
         context = LLMContext(system_prompt=system_prompt, messages=messages)
 
         # Create state selector for read-only access
-        def get_state(agent_name: str = name) -> AgentState:
-            return self._store.state.agent_state[agent_name]
+        def get_state() -> AgentState:
+            agent_state = self.get_agent_state(name)
+            if not agent_state:
+                raise ValueError(
+                    f"The state for agent {name} was requesed using its getter but no state for this agent was found."
+                )
+            print("Agent state from getter")
+            print(agent_state)
+            return agent_state
 
         # Create Agent instance (held here, not in Store)
         agent = Agent(
@@ -186,8 +202,17 @@ class AgentApp[StateT: State]:
 
         # Add metadata to agent state
         metadata = tool.to_metadata()
-        state = self._store.state.agent_state[agent_name]
-        state.tools.append(metadata)
+
+        agent_state = self.state.agent_state
+
+        if agent_name not in agent_state:
+            raise ValueError(
+                f"Attempting to grant tool for {agent_name}, but this agent does not exist in the agent state."
+            )
+
+        agent = agent_state[agent_name]
+        agent.tools.append(metadata)
+        self.update_agent_state(agent)
 
         # Store handler in app
         self._tools[agent_name][tool.name] = tool
@@ -211,8 +236,16 @@ class AgentApp[StateT: State]:
             raise KeyError(f"Tool '{tool_name}' is not granted to agent '{agent_name}'")
 
         # Remove metadata from agent state
-        state = self._store.state.agent_state[agent_name]
-        state.tools = [t for t in state.tools if t.name != tool_name]
+
+        agent_state = self.state.agent_state
+
+        if agent_name not in agent_state:
+            # If agent does not exist in state, then no tool to remove
+            return None
+
+        agent = agent_state[agent_name]
+        agent.tools = [t for t in agent.tools if t.name != tool_name]
+        self.update_agent_state(agent)
 
         # Remove handler from app
         del self._tools[agent_name][tool_name]
@@ -222,8 +255,8 @@ class AgentApp[StateT: State]:
         return self._agents.get(name)
 
     def get_agent_state(self, name: str) -> AgentState | None:
-        """Get an agent's state from the Store, or None if not found."""
-        return self._store.state.agent_state.get(name)
+        """Get an agent's state from the Store, or None if not found. Avoids copying the entire state to get the snapshot of the agent's state."""
+        return snapshot(self._store._state.agent_state.get(name))
 
     def remove_agent(self, name: str) -> None:
         """Remove an agent, deleting its state from the Store.
@@ -239,7 +272,7 @@ class AgentApp[StateT: State]:
 
         del self._agents[name]
         del self._tools[name]
-        del self._store.state.agent_state[name]
+        self.update_agent_state(name)
 
     def list_agents(self) -> list[str]:
         """List the names of all agents."""
@@ -262,24 +295,20 @@ class AgentApp[StateT: State]:
             A StoreUpdater that validates agent_name against allowed_agents before
             calling the underlying update_should_act updater.
         """
-        from agent_lib.store.StoreUpdater import StoreUpdater
+        updater = update_should_act.bind(self)
 
-        def validated_handler(
-            store: StateT, payload: UpdateShouldActPayload
-        ) -> frozenset[str]:
+        def validator(payload: UpdateShouldActPayload) -> Literal[True] | str:
             agent_name = payload["agent_name"]
             if allowed_agents != "all" and agent_name not in allowed_agents:
-                raise ValueError(
+                return (
                     f"Agent '{agent_name}' is not in allowed agents: {allowed_agents}"
                 )
-            return update_should_act.updater(store, payload)
+            else:
+                return True
 
-        return StoreUpdater(
-            name=update_should_act.name,
-            description=update_should_act.description,
-            payload_json_schema=update_should_act.payload_json_schema,
-            updater=validated_handler,
-        )
+        updater.validator = validator
+
+        return updater
 
     def run_once(self) -> None:
         """Run one iteration of the agent loop.

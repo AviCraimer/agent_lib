@@ -1,4 +1,5 @@
 from collections.abc import Callable
+import attr
 from deepdiff import parse_path
 
 
@@ -17,7 +18,7 @@ def make_scope_filter(
     def callback(_obj: object, path: str) -> bool:
         # Normalize DeepDiff path (e.g., root.data['key']) to dot notation
         # parse_path returns strings for keys and ints for list indices
-        normalized = ".".join(str(p) for p in parse_path(path))
+        normalized = normalize_diff_path(path)
         if not normalized:  # root - always traverse
             return True
         for scope in scopes:
@@ -27,3 +28,12 @@ def make_scope_filter(
         return False
 
     return callback
+
+
+def normalize_diff_path(path: str) -> str:
+    return ".".join(str(p) for p in parse_path(path))
+
+
+def join_diff_path(attributes_or_keys: list[str]):
+    """Joins attributes of a class object or keys of a dictionary to form a diff path"""
+    return ".".join(attributes_or_keys)

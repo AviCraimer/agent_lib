@@ -23,6 +23,10 @@ from agent_lib.examples.exact_text_length.writer_context import (
 )
 from agent_lib.llm_integrations.anthropic.claude_client import ClaudeClient
 from agent_lib.store.Store import Store
+from agent_lib.store.updaters.update_should_act import (
+    UpdateShouldActPayload,
+    update_should_act,
+)
 
 
 class ExactLengthApp(AgentApp[ExactLengthState]):
@@ -33,12 +37,13 @@ class ExactLengthApp(AgentApp[ExactLengthState]):
         state.user_prompt = user_prompt
         state.target_wordcount = target_wordcount
         store = Store(state)
-        super().__init__(store)
+        super().__init__("Exact_Text_Writing_App", store)
 
         # Bind StoreUpdaters to this app
-        update_text.bind(self)
-        update_wordcount.bind(self)
-        update_finished.bind(self)
+        self.update_text = update_text.bind(self)
+        self.update_wordcount = update_wordcount.bind(self)
+        self.update_finished = update_finished.bind(self)
+        self.update_should_act = update_should_act.bind(self)
 
         # Subscribe to trigger wordcount update when text changes
         self.subscribers.append(self._on_text_change)
@@ -47,31 +52,27 @@ class ExactLengthApp(AgentApp[ExactLengthState]):
 
         self.create_agent(
             name="writer",
-            llm_client=ClaudeClient("opus"),
+            llm_client=ClaudeClient("haiku"),
             system_prompt=WriterContext,
             post_process_response=reponse_as_single_tool_call("update_text"),
         )
 
         # Grant the update_text tool to the writer agent
-        self.grant_tool("writer", update_text)
+        self.grant_tool("writer", self.update_text)
 
         # Set the writer to act initially
-        from agent_lib.store.updaters.update_should_act import (
-            UpdateShouldActPayload,
-            update_should_act,
+        self.update_should_act(
+            UpdateShouldActPayload(agent_name="writer", should_act=True)
         )
-
-        update_should_act.bind(self)
-        update_should_act(UpdateShouldActPayload(agent_name="writer", should_act=True))
 
     def _on_text_change(self, affects: Callable[[str], bool]) -> None:
         """Handle text changes by updating wordcount and checking completion."""
         if affects("current_text"):
-            update_wordcount(None)
+            self.update_wordcount(None)
 
         state: ExactLengthState = self._store._state
         if state.wordcount == state.target_wordcount:
-            update_finished(True)
+            self.update_finished(True)
 
     def run(self):
         count = 1
@@ -100,8 +101,8 @@ class ExactLengthApp(AgentApp[ExactLengthState]):
 
 if __name__ == "__main__":
     exact_length = ExactLengthApp(
-        "Write three paragraphs on the question of how we could know if AI systems are conscious.",
-        400,
+        "Write on the question of how we could know if AI systems are conscious.",
+        100,
     )
 
     exact_length.run()

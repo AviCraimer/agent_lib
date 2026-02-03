@@ -7,16 +7,12 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator
 
-from deepdiff import Delta, parse_path
+from deepdiff import Delta
+
+from agent_lib.util.diff_utils import normalize_diff_path
 
 # Callback receives an `affects` function to check if a path was changed
 type SubscriberCallback = Callable[[Callable[[str], bool]], None]
-
-
-def _normalize_delta_path(delta_path: str) -> str:
-    """Convert DeepDiff path like root['data']['name'] to dot notation 'data.name'."""
-    parts = parse_path(delta_path)
-    return ".".join(str(p) for p in parts)
 
 
 def _make_affects(delta: Delta) -> Callable[[str], bool]:
@@ -36,7 +32,7 @@ def _make_affects(delta: Delta) -> Callable[[str], bool]:
         for change_type in delta.diff.values():
             if isinstance(change_type, dict):
                 for delta_path in change_type:
-                    normalized_paths.add(_normalize_delta_path(delta_path))
+                    normalized_paths.add(normalize_diff_path(delta_path))
 
     def affects(path: str) -> bool:
         """Check if a path was affected by this change.
