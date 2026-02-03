@@ -12,7 +12,6 @@ from typing import Self
 
 from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import NoProps, Props
-from agent_lib.store.Fanouts import Fanouts
 from agent_lib.store.snapshot import snapshot
 from agent_lib.store.state.AgentState import validate_agent_state
 from agent_lib.store.state.State import State
@@ -35,7 +34,6 @@ class Store[StateT: State = State]:
     handles agent lifecycle, tool management, and subscriber notifications.
     """
 
-    _fanouts: Fanouts
     _state: StateT
 
     def __init__(self) -> None:

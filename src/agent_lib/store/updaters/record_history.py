@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypedDict
 
-from agent_lib.store.StoreUpdater import StoreUpdater
+from agent_lib.store.StoreUpdater import store_updater
 from agent_lib.util.json_utils import JSONSchema
 
 if TYPE_CHECKING:
@@ -32,10 +32,29 @@ class RecordHistoryPayload(TypedDict):
     messages: list[dict[str, str]]
 
 
-# TODO updated to use decoratore
-def _record_history_handler(
-    store: Store, payload: RecordHistoryPayload
-) -> frozenset[str]:
+record_history_schema = JSONSchema(
+    {
+        "type": "object",
+        "properties": {
+            "agent_name": {"type": "string"},
+            "messages": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "role": {"type": "string"},
+                        "content": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "required": ["agent_name", "messages"],
+    }
+)
+
+
+@store_updater(schema=record_history_schema)
+def record_history(store: Store, payload: RecordHistoryPayload) -> frozenset[str]:
     """Append messages to an agent's history.
 
     Args:
@@ -51,27 +70,4 @@ def _record_history_handler(
     return frozenset({"_state.agent_state"})
 
 
-record_history: StoreUpdater[RecordHistoryPayload, Store] = StoreUpdater(
-    name="record_history",
-    description="Append messages to an agent's history.",
-    payload_json_schema=JSONSchema(
-        {
-            "type": "object",
-            "properties": {
-                "agent_name": {"type": "string"},
-                "messages": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "role": {"type": "string"},
-                            "content": {"type": "string"},
-                        },
-                    },
-                },
-            },
-            "required": ["agent_name", "messages"],
-        }
-    ),
-    updater=_record_history_handler,
-)
+# TODO: Can we add the agent_name to this diff string?

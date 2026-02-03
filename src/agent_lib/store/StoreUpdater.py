@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, overload
 
 from agent_lib.store.Store import Store
 from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
@@ -71,39 +71,74 @@ class StoreUpdater[P, S: Store](StoreUpdaterBase[P, S]):
         )
 
 
+# def store_updater[S: Store, P](
+#     handler: Callable[[S, P], frozenset[str]],
+# ) -> StoreUpdater[P, S]:
+#     """Decorator to create a StoreUpdater from a handler function.
+
+#     This provides a convenient way to define StoreUpdaters inline. The handler
+#     function receives (store, payload) and should mutate the store state,
+#     returning a frozenset of affected paths for efficient diffing.
+
+#     Usage:
+#         @store_updater
+#         def update_text(store: MyStore, new_text: str) -> frozenset[str]:
+#             store._state.current_text = new_text
+#             return frozenset({"_state.current_text"})
+
+#         # Later, bind and grant:
+#         update_text.bind(app)
+#         app.grant_tool("writer", update_text)
+
+#     Args:
+#         handler: Function that takes (store, payload) and returns affected paths
+
+#     Returns:
+#         A StoreUpdater wrapping the handler
+
+#     Note:
+#         The returned StoreUpdater has an empty payload_json_schema. For LLM tools,
+#         you should set the schema after creation:
+#             update_text.payload_json_schema = JSONSchema({...})
+#     """
+#     return StoreUpdater(
+#         name=handler.__name__,
+#         description=handler.__doc__ or "",
+#         payload_json_schema=JSONSchema({}),
+#         updater=handler,
+#     )
+
+
+@overload
 def store_updater[S: Store, P](
     handler: Callable[[S, P], frozenset[str]],
-) -> StoreUpdater[P, S]:
-    """Decorator to create a StoreUpdater from a handler function.
+    *,
+    schema: JSONSchema | None = None,
+) -> StoreUpdater[P, S]: ...
 
-    This provides a convenient way to define StoreUpdaters inline. The handler
-    function receives (store, payload) and should mutate the store state,
-    returning a frozenset of affected paths for efficient diffing.
 
-    Usage:
-        @store_updater
-        def update_text(store: MyStore, new_text: str) -> frozenset[str]:
-            store._state.current_text = new_text
-            return frozenset({"_state.current_text"})
+@overload
+def store_updater[S: Store, P](
+    handler: None = ...,
+    *,
+    schema: JSONSchema | None = None,
+) -> Callable[[Callable[[S, P], frozenset[str]]], StoreUpdater[P, S]]: ...
 
-        # Later, bind and grant:
-        update_text.bind(app)
-        app.grant_tool("writer", update_text)
 
-    Args:
-        handler: Function that takes (store, payload) and returns affected paths
+def store_updater[S: Store, P](
+    handler: Callable[[S, P], frozenset[str]] | None = None,
+    *,
+    schema: JSONSchema | None = None,
+) -> (
+    StoreUpdater[P, S]
+    | Callable[[Callable[[S, P], frozenset[str]]], StoreUpdater[P, S]]
+):
+    def wrap(fn: Callable[[S, P], frozenset[str]]) -> StoreUpdater[P, S]:
+        return StoreUpdater(
+            name=fn.__name__,
+            description=fn.__doc__ or "",
+            payload_json_schema=schema or JSONSchema({}),
+            updater=fn,
+        )
 
-    Returns:
-        A StoreUpdater wrapping the handler
-
-    Note:
-        The returned StoreUpdater has an empty payload_json_schema. For LLM tools,
-        you should set the schema after creation:
-            update_text.payload_json_schema = JSONSchema({...})
-    """
-    return StoreUpdater(
-        name=handler.__name__,
-        description=handler.__doc__ or "",
-        payload_json_schema=JSONSchema({}),
-        updater=handler,
-    )
+    return wrap if handler is None else wrap(handler)
