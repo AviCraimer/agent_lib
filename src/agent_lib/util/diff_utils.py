@@ -1,5 +1,4 @@
 from collections.abc import Callable
-import attr
 from deepdiff import parse_path
 
 
