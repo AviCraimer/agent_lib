@@ -22,7 +22,7 @@ class StoreUpdaterAsync[
     S: State,
     P,
     R,
-](StoreUpdaterBase[S, Exception]):
+](StoreUpdaterBase[S, P]):
     """A Tool that performs async work then mutates Store state.
 
     StoreUpdaterAsync separates async work (which may fail) from state mutation
@@ -53,7 +53,7 @@ class StoreUpdaterAsync[
     payload_json_schema: JSONSchema
     async_handler: Callable[[S, P], Coroutine[Any, Any, R]]
     on_success: StoreUpdater[S, R]
-    on_error: Callable[[S, Exception], frozenset[str]] | None = None
+    on_error: StoreUpdater[S, Exception] | None = None
     _app: Any = field(default=None, repr=False)
     _store: Any = field(default=None, repr=False)
 
@@ -69,15 +69,15 @@ class StoreUpdaterAsync[
                 self.on_success(result)
             except Exception as e:
                 if self.on_error:
-                    self.process_update(self.on_error, e)
+                    self.on_error(e)
                 else:
-                    raise
+                    raise e
 
         return _handler
 
-    async def __call__(self, payload: P) -> None:
-        """Invoke the async updater."""
-        await self.handler(payload)
+    def __call__(self, payload: P) -> Coroutine[Any, Any, None]:
+        """Invoke the tool with the given payload."""
+        return self.handler(payload)
 
     def to_metadata(self) -> ToolMetadata:
         """Convert to tool metadata for agent state."""

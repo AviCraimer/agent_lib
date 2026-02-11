@@ -19,7 +19,9 @@ CLAUDE_MODELS = {
 
 type ModelSize = Literal["sonnet", "haiku", "opus"]
 
-CLAUDE_MESSAGE_SCHEMA = json.load_schema(Path(__file__).parent / "claude_message_schema.json")
+CLAUDE_MESSAGE_SCHEMA = json.load_schema(
+    Path(__file__).parent / "claude_message_schema.json"
+)
 
 
 class ClaudeClient:
@@ -111,9 +113,9 @@ if __name__ == "__main__":
 
     client = ClaudeClient()
     ctx = LLMContext(
-        system_prompt=CtxComponent.leaf(lambda: ""),
+        system_prompt=CtxComponent.leaf(lambda: "", "Empty"),
         messages=CtxComponent.leaf(
-            lambda: '[{"role": "user", "content": "Tell me a short joke"}]'
+            lambda: '[{"role": "user", "content": "Tell me a short joke"}]', "Joke"
         ),
     )
     joke = client.get_response(ctx)

@@ -1,13 +1,11 @@
-from os import write
 from agent_lib.context.components.Tag import PromptTag, SystemTag, Tag, TagProps
 from agent_lib.context.CtxComponent import CtxComponent
-from agent_lib.context.Props import Props, propsclass
+from agent_lib.context.Props import Props
 from agent_lib.examples.exact_text_length.state import (
     ExactLengthState,
 )
 
 
-@propsclass
 class WriterProps(Props):
     user_prompt: str
     target_wordcount: int
@@ -18,7 +16,8 @@ class WriterProps(Props):
 PreviousTextTag = Tag().preset(TagProps(tag="previous-text", line_breaks=True))
 
 
-def greater_render_fn(props: WriterProps) -> str:
+@CtxComponent.fc(WriterProps)
+def GreaterLess(props: WriterProps) -> str:
     if props.current_wordcount:
 
         greater = props.current_wordcount > props.target_wordcount
@@ -28,10 +27,8 @@ def greater_render_fn(props: WriterProps) -> str:
         raise ValueError("Should not be called when current_wordcount is empty.")
 
 
-GreaterLess = CtxComponent(greater_render_fn, WriterProps)
-
-
-def writer_render_fn(props: WriterProps):
+@CtxComponent.fc(WriterProps)
+def WriterComponent(props: WriterProps):
 
     instruction = f"""Your goal is to write text based on the following prompt:{PromptTag(props.user_prompt)}The generated text should have a wordcount of exactly {props.target_wordcount}. No other text should be generated."""
 
@@ -41,9 +38,6 @@ def writer_render_fn(props: WriterProps):
     system_prompt = SystemTag(instruction).render()
 
     return system_prompt
-
-
-WriterComponent = CtxComponent(writer_render_fn, WriterProps)
 
 
 def map_to_writer(state: ExactLengthState) -> WriterProps:

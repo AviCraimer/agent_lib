@@ -11,13 +11,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 from copy import copy
-from deepdiff import DeepDiff, Delta
 
 
-from agent_lib.store.snapshot import snapshot
-
+from agent_lib.tool.Tool import Tool
 from agent_lib.tool.ToolMetadata import ToolMetadata
 
 if TYPE_CHECKING:
@@ -26,7 +24,7 @@ if TYPE_CHECKING:
     from agent_lib.store.Store import Store
 
 
-class StoreUpdaterBase[S: State, P](ABC):
+class StoreUpdaterBase[S: State, P](Tool[P, None], ABC):
     """Base class for tools that mutate Store state with change tracking.
 
     StoreUpdaters are Tools that:

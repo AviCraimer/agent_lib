@@ -1,11 +1,12 @@
 from agent_lib.context.CtxComponent import CtxComponent
-from agent_lib.context.components.Tag import Tag, TagProps
-from agent_lib.context.Props import Props, propsclass
+from agent_lib.context.components.Tag import Tag, TagProps, SystemTag
+from agent_lib.context.Props import Props
 
 
-TranscriptCTA = CtxComponent.leaf(lambda: "Provide the transcript below:")
+TranscriptCTA = CtxComponent.leaf(
+    lambda: "Provide the transcript below:", "TranscriptCTA"
+)
 
-SystemPrompt = Tag().preset(TagProps(tag="system", line_breaks=True))
 
 TranscriptionAssistantRole = (
     Tag()
@@ -14,7 +15,6 @@ TranscriptionAssistantRole = (
 )
 
 
-@propsclass
 class AudioProps(Props):
     audio_format: str
     language: str
@@ -30,7 +30,7 @@ Guidelines:
 
 # Usage
 
-TranscriptionSystemPrompt = SystemPrompt(
+TranscriptionSystemPrompt = SystemTag(
     [
         TranscriptionAssistantRole,
         AudioInstructions.pass_props(

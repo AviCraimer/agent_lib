@@ -1,9 +1,8 @@
 # Items is used for a formatted list with a custom delimiter around each item in the list. It optionally allows special treatment of first and last items.
 from agent_lib.context.CtxComponent import Children, CtxComponent
-from agent_lib.context.Props import Props, propsclass, JustChildren
+from agent_lib.context.Props import Props, JustChildren
 
 
-@propsclass
 class ItemsProps(Props):
     """An example of a higher-order component, which just means a component that takes another component as a prop and does stuff with it."""
 
@@ -54,8 +53,11 @@ def Items_render_fn(props: ItemsProps) -> str:
 Items = CtxComponent(Items_render_fn, ItemsProps)
 
 
-Paragraph = CtxComponent.wrapper(("", "\n\n"))
+Paragraph = CtxComponent.wrapper(("", "\n\n"), "Paragraph")
 
 Paragraphs = Items.preset(
-    ItemsProps(item_wrapper=Paragraph, last_wrapper=CtxComponent.wrapper(""))
+    ItemsProps(
+        item_wrapper=Paragraph, last_wrapper=CtxComponent.wrapper("", "FinalParagraph")
+    )
 )
+Paragraphs.name = "Paragraphs"

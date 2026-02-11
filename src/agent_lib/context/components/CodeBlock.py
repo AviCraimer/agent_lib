@@ -1,6 +1,6 @@
 import re
 from agent_lib.context.CtxComponent import CtxComponent
-from agent_lib.context.Props import Props, propsclass
+from agent_lib.context.Props import Props
 from typing import Literal
 
 # fmt: off
@@ -52,13 +52,12 @@ CodeblockLanguage = Literal[
 # fmt: on
 
 
-@propsclass
 class CodeBlockProps(Props):
     language: CodeblockLanguage
 
 
 class CodeBlock(CtxComponent[CodeBlockProps]):
-    _PropsClass = CodeBlockProps
+    _props_class = CodeBlockProps
 
     def __init__(self):
 
@@ -86,10 +85,10 @@ class CodeBlock(CtxComponent[CodeBlockProps]):
         return code
 
 
-MarkdownBlock = CodeBlock().preset(CodeBlockProps(language="markdown"))
+MarkdownBlock = CodeBlock().preset(CodeBlock.Props(language="markdown"))
 
-JavascriptBlock = CodeBlock().preset(CodeBlockProps(language="javascript"))
+JavascriptBlock = CodeBlock().preset(CodeBlock.Props(language="javascript"))
 
-TypescriptBlock = CodeBlock().preset(CodeBlockProps(language="typescript"))
+TypescriptBlock = CodeBlock().preset(CodeBlock.Props(language="typescript"))
 
-PythonBlock = CodeBlock().preset(CodeBlockProps(language="python"))
+PythonBlock = CodeBlock().preset(CodeBlock.Props(language="python"))

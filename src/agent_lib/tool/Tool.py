@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any, Coroutine, overload
 
 from agent_lib.tool.ToolMetadata import ToolMetadata
 from agent_lib.util.json_utils import JSONSchema
@@ -35,9 +36,13 @@ class Tool[P, R]:
     name: str
     description: str
     payload_json_schema: JSONSchema
-    handler: Callable[[P], R]
 
-    def __call__(self, payload: P) -> R:
+    @property
+    def handler(
+        self,
+    ) -> Callable[[P], R] | Callable[[P], Coroutine[Any, Any, R]]: ...
+
+    def __call__(self, payload: P) -> R | Coroutine[Any, Any, R]:
         """Invoke the tool with the given payload."""
         return self.handler(payload)
 

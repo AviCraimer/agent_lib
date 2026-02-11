@@ -11,6 +11,7 @@ from typing import Any, ClassVar, overload
 
 from agent_lib.store.state.State import State
 from agent_lib.store.StoreUpdaterBase import StoreUpdaterBase
+from agent_lib.tool.Tool import Tool
 from agent_lib.tool.ToolMetadata import ToolMetadata
 from agent_lib.util.json_utils import JSONSchema
 
@@ -57,10 +58,6 @@ class StoreUpdater[S: State, P](StoreUpdaterBase[S, P]):
             self.process_update(self.updater, payload)
 
         return _handler
-
-    def __call__(self, payload: P) -> None:
-        """Invoke the updater with the given payload."""
-        self.handler(payload)
 
     # TODO: This to_metadata method looks like it should be a default implementation on the Tool class.
     def to_metadata(self) -> ToolMetadata:

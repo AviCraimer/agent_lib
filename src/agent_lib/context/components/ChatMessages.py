@@ -24,8 +24,19 @@ class ChatMessagesProps(Props):
     history: list[dict[str, str]]
 
 
-def _render_chat_messages(props: ChatMessagesProps) -> str:
-    """Render message history to JSON array.
+@CtxComponent.fc(ChatMessagesProps)
+def ChatMessages(props: ChatMessagesProps) -> str:
+    """Pre-built component for rendering chat message history.
+
+    Usage with Store.connect:
+        messages_component = store.connect(
+            ChatMessages,
+            lambda state: ChatMessagesProps(history=state.agent_state["agent_name"].history)
+        )
+
+    This creates a NoProps component that dynamically renders the current history.
+
+    Render message history to JSON array.
 
     Args:
         props: Contains the history to render
@@ -34,18 +45,3 @@ def _render_chat_messages(props: ChatMessagesProps) -> str:
         JSON string of the messages array
     """
     return json.dumps(props.history)
-
-
-ChatMessages: CtxComponent[ChatMessagesProps] = CtxComponent(
-    _render_chat_messages, ChatMessagesProps
-)
-"""Pre-built component for rendering chat message history.
-
-Usage with Store.connect:
-    messages_component = store.connect(
-        ChatMessages,
-        lambda s: ChatMessagesProps(history=s._state.agent_state["agent_name"].history)
-    )
-
-This creates a NoProps component that dynamically renders the current history.
-"""

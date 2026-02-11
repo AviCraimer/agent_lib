@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from deepdiff import Delta
-
 from agent_lib.agent.Agent import Agent, PostProcessResponseFn
 from agent_lib.agent.LLMClient import LLMClient
 from agent_lib.context.components.ChatMessages import ChatMessages, ChatMessagesProps
