@@ -59,7 +59,6 @@ if __name__ == "__main__":
         prev_generated_text="",
         user_prompt="Write 'hello'",
     )
-    print(writer_render_fn(no_text_props1))
 
     fewer_props = WriterProps(
         target_wordcount=2,
@@ -67,7 +66,6 @@ if __name__ == "__main__":
         prev_generated_text="hello",
         user_prompt="Write 'hello world'",
     )
-    print(writer_render_fn(fewer_props))
 
     greater_props = WriterProps(
         target_wordcount=1,
@@ -75,4 +73,3 @@ if __name__ == "__main__":
         prev_generated_text="hello world you",
         user_prompt="Write 'hello'",
     )
-    print(writer_render_fn(greater_props))
