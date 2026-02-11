@@ -13,7 +13,6 @@ from agent_lib.context.CtxComponent import CtxComponent
 from agent_lib.context.Props import Props
 
 
-@dataclass(frozen=True)
 class ChatMessagesProps(Props):
     """Props for ChatMessages component.
 
